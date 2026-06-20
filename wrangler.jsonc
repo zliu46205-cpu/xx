@@ -1,9 +1,18 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "xx",
+  "name": "xxx1111",
   "compatibility_date": "2026-06-18",
+  "main": "./worker/index.mjs",
   "assets": {
+    "binding": "ASSETS",
     "directory": "./dist",
     "not_found_handling": "single-page-application"
-  }
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "xuanxue",
+      "database_id": "7ad4c265-d678-4467-8cf3-7d191fcc0596"
+    }
+  ]
 }

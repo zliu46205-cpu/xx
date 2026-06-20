@@ -1,4 +1,4 @@
-import http from "node:http";
+﻿import http from "node:http";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -51,6 +51,10 @@ function sanitizeValues(values = {}) {
     question: String(values.question || "").slice(0, 260),
     concernType: String(values.concernType || ""),
     timeRange: String(values.timeRange || ""),
+    focusProblem: String(values.focusProblem || ""),
+    readingFocus: String(values.readingFocus || ""),
+    reportTone: String(values.reportTone || ""),
+    detailLevel: String(values.detailLevel || ""),
     background: String(values.background || "").slice(0, 800),
     birthDate: String(values.birthDate || ""),
     birthTime: String(values.birthTime || ""),
@@ -152,3 +156,4 @@ await ensureStorage();
 server.listen(port, "127.0.0.1", () => {
   console.log(`xuanxue api listening on http://127.0.0.1:${port}`);
 });
+
