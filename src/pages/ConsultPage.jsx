@@ -46,7 +46,7 @@ const localFieldLabels = {
   background: "补充背景",
 };
 
-export function ConsultPage({ selectedMethod, selectMethod }) {
+export function ConsultPage({ selectedMethod, selectMethod, session }) {
   const method = useMemo(() => methods.find((item) => item.id === selectedMethod) || methods[0], [selectedMethod]);
   const [values, setValues] = useState({
     question: "",
@@ -80,7 +80,7 @@ export function ConsultPage({ selectedMethod, selectMethod }) {
 
   useEffect(() => {
     let cancelled = false;
-    listReports(6)
+    listReports(6, session)
       .then((payload) => {
         if (cancelled) return;
         setApiMode("online");
@@ -93,7 +93,7 @@ export function ConsultPage({ selectedMethod, selectMethod }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [session]);
 
   function update(name, value) {
     setValues((current) => ({ ...current, [name]: value }));
@@ -161,12 +161,12 @@ export function ConsultPage({ selectedMethod, selectMethod }) {
     setReport(null);
     setStatus("loading");
     try {
-      const payload = await createReport(values, method);
+      const payload = await createReport(values, method, session);
       setReport(payload.report);
       setStatus("ready");
       setApiMode("online");
-      setNotice("报告已生成并保存到历史记录。");
-      const historyPayload = await listReports(6);
+      setNotice(session ? "报告已生成并保存到你的用户中心。" : "报告已生成。登录后可以保存到用户中心并查看历史。");
+      const historyPayload = await listReports(6, session);
       setReportHistory(historyPayload.reports || []);
     } catch {
       const fallbackReport = buildReport(values, method);
@@ -475,3 +475,4 @@ function ReportPanel({ report, copySummary, exportText, regenerate }) {
     </article>
   );
 }
+

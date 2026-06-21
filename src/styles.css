@@ -1397,3 +1397,245 @@ input:focus, textarea:focus, select:focus {
     font-size: 16px;
   }
 }
+
+/* Commercial system: auth, account, billing, admin */
+.commercial-header {
+  grid-template-columns: 220px minmax(0, 1fr) auto;
+}
+
+.auth-card-wide {
+  width: min(620px, 100%);
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin: 18px 0;
+  padding: 6px;
+  border: 1px solid rgba(212, 175, 55, 0.22);
+  background: rgba(0, 0, 0, 0.24);
+}
+.segmented button {
+  min-height: 40px;
+  border: 0;
+  color: var(--muted);
+  background: transparent;
+  font-weight: 900;
+}
+.segmented button.active {
+  color: #150e07;
+  background: linear-gradient(135deg, #f2d56b, var(--gold));
+}
+
+.account-grid,
+.admin-metrics,
+.billing-grid,
+.account-layout,
+.admin-layout,
+.checkout-panel {
+  width: min(1220px, calc(100% - 32px));
+  margin: 0 auto 28px;
+}
+.account-grid,
+.admin-metrics {
+  display: grid;
+  grid-template-columns: 1.35fr repeat(3, 1fr);
+  gap: 16px;
+}
+.account-card,
+.billing-card,
+.checkout-panel,
+.account-panel,
+.admin-metrics article {
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(135deg, rgba(212, 175, 55, 0.08), transparent 38%),
+    linear-gradient(180deg, rgba(36, 32, 26, 0.96), rgba(18, 13, 9, 0.96));
+  box-shadow: var(--shadow);
+}
+.account-card,
+.admin-metrics article {
+  min-height: 170px;
+  padding: 24px;
+}
+.account-card span,
+.billing-card span,
+.checkout-panel span,
+.admin-metrics span {
+  color: var(--gold);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 900;
+}
+.account-card h2,
+.checkout-panel h2,
+.billing-card h2,
+.account-panel h2 {
+  color: var(--gold-2);
+  font-family: var(--font-display);
+}
+.account-card strong,
+.admin-metrics strong {
+  display: block;
+  margin: 12px 0;
+  color: #ffe6a4;
+  font-family: var(--font-number);
+  font-size: 42px;
+}
+.account-card p,
+.billing-card p,
+.checkout-panel p {
+  color: var(--faint);
+  line-height: 1.75;
+}
+.profile-card {
+  position: relative;
+  overflow: hidden;
+}
+.profile-card::after {
+  content: "象";
+  position: absolute;
+  right: 18px;
+  bottom: -18px;
+  color: rgba(212, 175, 55, 0.08);
+  font-family: var(--font-display);
+  font-size: 120px;
+}
+.membership-badge {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  padding: 0 12px;
+  border: 1px solid rgba(212, 175, 55, 0.32);
+  color: var(--gold-2);
+  background: rgba(212, 175, 55, 0.08);
+  font-size: 13px;
+  font-weight: 900;
+}
+.account-layout,
+.admin-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.account-panel {
+  min-height: 360px;
+  padding: 24px;
+}
+.section-title.compact {
+  margin-bottom: 16px;
+}
+.section-title.compact h2 {
+  margin: 5px 0 0;
+  font-size: 28px;
+}
+.record-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.14);
+}
+.record-row:last-child {
+  border-bottom: 0;
+}
+.record-row strong {
+  color: var(--gold-2);
+}
+.record-row p {
+  margin: 6px 0 0;
+  color: var(--faint);
+  line-height: 1.65;
+}
+.record-row small {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.billing-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 16px;
+}
+.billing-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 450px;
+  padding: 22px;
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+.billing-card:hover,
+.billing-card.selected {
+  transform: translateY(-2px);
+  border-color: var(--line-strong);
+}
+.billing-card ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.billing-card li {
+  color: rgba(245, 232, 199, 0.78);
+}
+.billing-card li::before {
+  content: "•";
+  margin-right: 8px;
+  color: var(--gold);
+}
+.billing-card .btn {
+  margin-top: auto;
+}
+.checkout-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px;
+}
+
+.admin-metrics {
+  grid-template-columns: repeat(5, 1fr);
+}
+.admin-metrics article {
+  min-height: 140px;
+}
+.admin-metrics strong {
+  font-size: 36px;
+}
+
+@media (max-width: 1100px) {
+  .billing-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .admin-metrics,
+  .account-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .commercial-header {
+    grid-template-columns: 1fr;
+  }
+  .account-grid,
+  .admin-metrics,
+  .billing-grid,
+  .account-layout,
+  .admin-layout,
+  .checkout-panel {
+    grid-template-columns: 1fr;
+  }
+  .checkout-panel {
+    display: grid;
+  }
+  .record-row {
+    display: grid;
+  }
+  .record-row small {
+    white-space: normal;
+  }
+}

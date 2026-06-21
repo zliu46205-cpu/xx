@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_XUANXUE_API_BASE || "http://127.0.0.1:8787";
+﻿const API_BASE = import.meta.env.VITE_XUANXUE_API_BASE || "";
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -17,17 +17,66 @@ async function request(path, options = {}) {
   return payload;
 }
 
-export async function createReport(values, method) {
+function authHeaders(session) {
+  return session?.token ? { authorization: `Bearer ${session.token}` } : {};
+}
+
+export async function createReport(values, method, session) {
   return request("/api/reports", {
     method: "POST",
+    headers: authHeaders(session),
     body: JSON.stringify({ values, method }),
   });
 }
 
-export async function listReports(limit = 8) {
-  return request(`/api/reports?limit=${limit}`);
+export async function listReports(limit = 8, session) {
+  return request(`/api/reports?limit=${limit}`, { headers: authHeaders(session) });
 }
 
 export async function checkApiHealth() {
   return request("/api/health");
+}
+
+export async function registerUser(values) {
+  return request("/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ email: values.account, password: values.password, name: values.nickname }),
+  });
+}
+
+export async function loginUser(values) {
+  return request("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email: values.account, password: values.password }),
+  });
+}
+
+export async function loginAdmin(values) {
+  return request("/api/admin/login", {
+    method: "POST",
+    body: JSON.stringify({ account: values.account, password: values.password, code: values.code }),
+  });
+}
+
+export async function getAccount(session) {
+  return request("/api/account", { headers: authHeaders(session) });
+}
+
+export async function createOrder(planId, session) {
+  return request("/api/orders", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify({ planId }),
+  });
+}
+
+export async function markMockPaid(orderId, session) {
+  return request(`/api/orders/${orderId}/mock-pay`, {
+    method: "POST",
+    headers: authHeaders(session),
+  });
+}
+
+export async function getAdminOverview(session) {
+  return request("/api/admin/overview", { headers: authHeaders(session) });
 }
