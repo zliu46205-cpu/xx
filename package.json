@@ -1,16 +1,19 @@
 {
-  "type": "module",
-  "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "api": "node server/index.mjs",
-    "build": "node scripts/clean-cloudflare-assets.mjs before && vite build && node scripts/clean-cloudflare-assets.mjs after",
-    "preview": "vite preview --host 127.0.0.1"
-  },
-  "dependencies": {
-    "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "react": "latest",
-    "react-dom": "latest"
-  },
-  "devDependencies": {}
+    "type":  "module",
+    "scripts":  {
+                    "dev":  "vite --host 127.0.0.1",
+                    "api":  "node server/index.mjs",
+                    "build":  "node scripts/clean-cloudflare-assets.mjs before \u0026\u0026 vite build \u0026\u0026 node scripts/clean-cloudflare-assets.mjs after",
+                    "preview":  "vite preview --host 127.0.0.1",
+                    "test:reports":  "node scripts/report-quality-check.mjs"
+                },
+    "dependencies":  {
+                         "@vitejs/plugin-react":  "latest",
+                         "vite":  "latest",
+                         "react":  "latest",
+                         "react-dom":  "latest"
+                     },
+    "devDependencies":  {
+
+                        }
 }

@@ -16,6 +16,8 @@ const files = {
 const port = Number(process.env.XUANXUE_API_PORT || 8787);
 const sessionSecret = process.env.SESSION_SECRET || "local-dev-session-secret-change-before-deploy";
 
+const API_VERSION = "deepseek-json-v2";
+
 const PLANS = {
   free: { name: "免费试测", amount: 0, credits: 1, type: "free" },
   single: { name: "单项精批", amount: 1990, credits: 3, type: "credits" },
@@ -344,7 +346,7 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
     if (req.method === "OPTIONS") return sendJson(res, 204, {});
-    if (req.method === "GET" && url.pathname === "/api/health") return sendJson(res, 200, { ok: true, service: "xuanxue-api", ai: process.env.DEEPSEEK_API_KEY ? "configured" : "not-configured", model: process.env.DEEPSEEK_MODEL || "deepseek-v4-flash" });
+    if (req.method === "GET" && url.pathname === "/api/health") return sendJson(res, 200, { ok: true, service: "xuanxue-api", version: API_VERSION, ai: process.env.DEEPSEEK_API_KEY ? "configured" : "not-configured", model: process.env.DEEPSEEK_MODEL || "deepseek-v4-flash" });
     if (req.method === "POST" && url.pathname === "/api/auth/register") return register(req, res);
     if (req.method === "POST" && url.pathname === "/api/auth/login") return login(req, res);
     if (req.method === "POST" && url.pathname === "/api/admin/login") return adminLogin(req, res);

@@ -7,6 +7,8 @@ const jsonHeaders = {
   "access-control-allow-headers": "content-type, authorization",
 };
 
+const API_VERSION = "deepseek-json-v2";
+
 const PLANS = {
   free: { name: "免费试测", amount: 0, credits: 1, type: "free" },
   single: { name: "单项精批", amount: 1990, credits: 3, type: "credits" },
@@ -466,6 +468,7 @@ async function handleApi(request, env) {
     return sendJson({
       ok: true,
       service: "xuanxue-worker-api",
+      version: API_VERSION,
       storage: env.DB ? "d1" : "not-configured",
       ai: env.DEEPSEEK_API_KEY ? "configured" : "not-configured",
       model: env.DEEPSEEK_MODEL || "deepseek-v4-flash",
