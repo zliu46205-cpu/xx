@@ -1,4 +1,4 @@
-﻿import http from "node:http";
+import http from "node:http";
 import crypto from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -106,6 +106,7 @@ async function generateAiReport(baseReport, values, method) {
         { role: "user", content: `请基于以下输入生成更具体的商业级中文术数参考报告。只返回 JSON。\n${JSON.stringify(input)}` },
       ],
       temperature: 0.75,
+      response_format: { type: "json_object" },
       max_tokens: 2600,
     }),
   });
@@ -273,7 +274,7 @@ async function createReport(req, res) {
   try {
     report = await generateAiReport(report, values, method);
   } catch (error) {
-    report = { ...report, generatedBy: "rules", aiError: "AI_GENERATION_FALLBACK" };
+    report = { ...report, generatedBy: "rules", aiError: String(error?.message || "AI_GENERATION_FALLBACK").slice(0, 180) };
   }
   const rows = await readList(files.reports);
   rows.unshift({ id: report.id, createdAt: report.createdAt, userId: session?.role === "user" ? session.userId : null, methodId: method.id, methodName: method.name, question: values.question, concernType: values.concernType, report });
