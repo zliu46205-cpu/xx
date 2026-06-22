@@ -38,14 +38,7 @@ function stripCodeFence(text) {
 }
 
 function extractResponseText(payload) {
-  if (payload.output_text) return payload.output_text;
-  const parts = [];
-  for (const item of payload.output || []) {
-    for (const content of item.content || []) {
-      if (content.type === "output_text" && content.text) parts.push(content.text);
-    }
-  }
-  return parts.join("\n");
+  return payload?.choices?.[0]?.message?.content || "";
 }
 
 function safeArray(value, fallback = []) {
@@ -63,7 +56,7 @@ function mergeAiReport(baseReport, aiReport) {
     suggestions: safeArray(aiReport.suggestions, baseReport.suggestions),
     stageAdvice: safeArray(aiReport.stageAdvice, baseReport.stageAdvice),
     termGlossary: safeArray(aiReport.termGlossary, baseReport.termGlossary),
-    generatedBy: "openai",
+    generatedBy: "deepseek",
   };
   if (aiReport.oracle && typeof aiReport.oracle === "object") {
     next.oracle = { ...baseReport.oracle, ...aiReport.oracle };
@@ -72,8 +65,8 @@ function mergeAiReport(baseReport, aiReport) {
 }
 
 async function generateAiReport(baseReport, values, method, env) {
-  if (!env.OPENAI_API_KEY) return baseReport;
-  const model = env.OPENAI_MODEL || "gpt-4.1-mini";
+  if (!env.DEEPSEEK_API_KEY) return baseReport;
+  const model = env.DEEPSEEK_MODEL || "deepseek-v4-flash";
   const input = {
     method,
     values: {
@@ -100,23 +93,25 @@ async function generateAiReport(baseReport, values, method, env) {
     baseReport,
   };
 
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const response = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${env.OPENAI_API_KEY}`,
+      authorization: `Bearer ${env.DEEPSEEK_API_KEY}`,
     },
     body: JSON.stringify({
       model,
-      instructions: AI_REPORT_INSTRUCTIONS,
-      input: `请基于以下输入生成更具体的商业级中文术数参考报告。只返回 JSON。\n${JSON.stringify(input)}`,
+      messages: [
+        { role: "system", content: AI_REPORT_INSTRUCTIONS },
+        { role: "user", content: `请基于以下输入生成更具体的商业级中文术数参考报告。只返回 JSON。\n${JSON.stringify(input)}` },
+      ],
       temperature: 0.75,
-      max_output_tokens: 2600,
+      max_tokens: 2600,
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`OpenAI request failed: ${response.status}`);
+    throw new Error(`DeepSeek request failed: ${response.status}`);
   }
   const payload = await response.json();
   const text = stripCodeFence(extractResponseText(payload));
@@ -471,8 +466,8 @@ async function handleApi(request, env) {
       ok: true,
       service: "xuanxue-worker-api",
       storage: env.DB ? "d1" : "not-configured",
-      ai: env.OPENAI_API_KEY ? "configured" : "not-configured",
-      model: env.OPENAI_MODEL || "gpt-4.1-mini",
+      ai: env.DEEPSEEK_API_KEY ? "configured" : "not-configured",
+      model: env.DEEPSEEK_MODEL || "deepseek-v4-flash",
     });
   }
   if (request.method === "POST" && url.pathname === "/api/auth/register") return registerUser(request, env);
@@ -507,6 +502,7 @@ export default {
     }
   },
 };
+
 
 
 

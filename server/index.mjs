@@ -39,14 +39,7 @@ function stripCodeFence(text) {
 }
 
 function extractResponseText(payload) {
-  if (payload.output_text) return payload.output_text;
-  const parts = [];
-  for (const item of payload.output || []) {
-    for (const content of item.content || []) {
-      if (content.type === "output_text" && content.text) parts.push(content.text);
-    }
-  }
-  return parts.join("\n");
+  return payload?.choices?.[0]?.message?.content || "";
 }
 
 function safeArray(value, fallback = []) {
@@ -64,7 +57,7 @@ function mergeAiReport(baseReport, aiReport) {
     suggestions: safeArray(aiReport.suggestions, baseReport.suggestions),
     stageAdvice: safeArray(aiReport.stageAdvice, baseReport.stageAdvice),
     termGlossary: safeArray(aiReport.termGlossary, baseReport.termGlossary),
-    generatedBy: "openai",
+    generatedBy: "deepseek",
   };
   if (aiReport.oracle && typeof aiReport.oracle === "object") {
     next.oracle = { ...baseReport.oracle, ...aiReport.oracle };
@@ -73,8 +66,8 @@ function mergeAiReport(baseReport, aiReport) {
 }
 
 async function generateAiReport(baseReport, values, method) {
-  if (!process.env.OPENAI_API_KEY) return baseReport;
-  const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+  if (!process.env.DEEPSEEK_API_KEY) return baseReport;
+  const model = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
   const input = {
     method,
     values: {
@@ -100,18 +93,23 @@ async function generateAiReport(baseReport, values, method) {
     },
     baseReport,
   };
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const response = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+    },
     body: JSON.stringify({
       model,
-      instructions: AI_REPORT_INSTRUCTIONS,
-      input: `请基于以下输入生成更具体的商业级中文术数参考报告。只返回 JSON。\n${JSON.stringify(input)}`,
+      messages: [
+        { role: "system", content: AI_REPORT_INSTRUCTIONS },
+        { role: "user", content: `请基于以下输入生成更具体的商业级中文术数参考报告。只返回 JSON。\n${JSON.stringify(input)}` },
+      ],
       temperature: 0.75,
-      max_output_tokens: 2600,
+      max_tokens: 2600,
     }),
   });
-  if (!response.ok) throw new Error(`OpenAI request failed: ${response.status}`);
+  if (!response.ok) throw new Error(`DeepSeek request failed: ${response.status}`);
   const payload = await response.json();
   const parsed = JSON.parse(stripCodeFence(extractResponseText(payload)));
   return mergeAiReport(baseReport, parsed);
@@ -345,7 +343,7 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
     if (req.method === "OPTIONS") return sendJson(res, 204, {});
-    if (req.method === "GET" && url.pathname === "/api/health") return sendJson(res, 200, { ok: true, service: "xuanxue-api", ai: process.env.OPENAI_API_KEY ? "configured" : "not-configured", model: process.env.OPENAI_MODEL || "gpt-4.1-mini" });
+    if (req.method === "GET" && url.pathname === "/api/health") return sendJson(res, 200, { ok: true, service: "xuanxue-api", ai: process.env.DEEPSEEK_API_KEY ? "configured" : "not-configured", model: process.env.DEEPSEEK_MODEL || "deepseek-v4-flash" });
     if (req.method === "POST" && url.pathname === "/api/auth/register") return register(req, res);
     if (req.method === "POST" && url.pathname === "/api/auth/login") return login(req, res);
     if (req.method === "POST" && url.pathname === "/api/admin/login") return adminLogin(req, res);
@@ -366,4 +364,6 @@ await ensureStorage();
 server.listen(port, "127.0.0.1", () => {
   console.log(`xuanxue api listening on http://127.0.0.1:${port}`);
 });
+
+
 

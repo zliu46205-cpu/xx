@@ -83,10 +83,11 @@ https://浣犵殑鍩熷悕/api/health
 在 Cloudflare Worker 的 `Settings -> Variables and Secrets` 添加：
 
 ```text
-OPENAI_API_KEY=你的 OpenAI API Key
-OPENAI_MODEL=gpt-4.1-mini
+DEEPSEEK_API_KEY=你的 DeepSeek API Key
+DEEPSEEK_MODEL=deepseek-v4-flash
 ```
 
-`OPENAI_API_KEY` 建议选择 Secret 类型。没有配置时，网站会继续使用内置规则引擎生成报告；配置后，后端会优先调用模型生成更细、更有区分度的报告，失败时自动回退到规则报告。
+`DEEPSEEK_API_KEY` 建议选择 Secret 类型。没有配置时，网站会继续使用内置规则引擎生成报告；配置后，后端会优先调用模型生成更细、更有区分度的报告，失败时自动回退到规则报告。
 
 注意：公共网站无法直接调用你本机的 Codex skill，所以这里是把 `chinese-metaphysics-advisor` 的工作流、安全边界和输出结构写入后端生成指令。
+
