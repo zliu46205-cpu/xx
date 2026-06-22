@@ -435,6 +435,21 @@ function ReportPanel({ report, copySummary, exportText, regenerate }) {
           </div>
         </section>
 
+        {report.stageAdvice?.length ? (
+          <section className="stage-advice-panel">
+            <h3>分步落地</h3>
+            <div>
+              {report.stageAdvice.map((item, index) => (
+                <article key={`${item.title}-${index}`}>
+                  <span>{String(index + 1).padStart(2, "0")}</span>
+                  <strong>{item.title}</strong>
+                  <p>{item.symbol}</p>
+                  <small>{item.real}</small>
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
         <section className="report-columns">
           <div>
             <h3>行动建议</h3>
@@ -475,4 +490,5 @@ function ReportPanel({ report, copySummary, exportText, regenerate }) {
     </article>
   );
 }
+
 
