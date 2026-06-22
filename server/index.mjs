@@ -24,6 +24,98 @@ const PLANS = {
   review: { name: "人工复核", amount: 29900, credits: 1, type: "service" },
 };
 
+const AI_REPORT_INSTRUCTIONS = `
+你是“天机观象”的中国传统术数报告生成器。你要按 chinese-metaphysics-advisor 的原则输出：中文优先、术语准确、白话能懂、结论审慎、现实可执行。
+定位：传统文化、象征系统、人生反思、娱乐参考、规划建议。不得制造迷信权威，不得恐吓，不得保证发财、复合、升职、治病。
+红线：不做死亡时间、寿命、疾病诊断、彩票股票指令、违法规避、诅咒害人、付费消灾、法事保证、婚姻强迫。
+输出必须是 JSON，不要 Markdown，不要额外解释。JSON 字段必须包含：summary, situation, tendency, inference, suggestions, stageAdvice, oracle, termGlossary。
+字段要求：summary 80-140 字；situation 160-260 字；tendency 120-220 字；inference 4-6 条；suggestions 5-7 条；stageAdvice 4 条，每条为 {title, symbol, real}；oracle 包含 mainHexagram, changedHexagram, score, firstTitle, secondTitle, guaci, xiangci, plainText, caution, similarCase；termGlossary 4-6 组。
+根据方法使用对应术语：八字用日主/月令/十神/财官印食/大运流年；紫微用命宫/身宫/十二宫/三方四正/四化；梅花用本互变/体用/动爻/外应；六爻用世应/用神/六亲/六神/动变；奇门用九宫/八门/九星/八神/值符值使；风水用明堂/气口/动线/坐向/采光；起名用五行意象/音形义/避讳。
+如果资料不足，要明确“按简化路径分析”，但仍要给出有区分度的判断。
+`;
+
+function stripCodeFence(text) {
+  return String(text || "").replace(/^```(?:json)?\s*/i, "").replace(/```$/i, "").trim();
+}
+
+function extractResponseText(payload) {
+  if (payload.output_text) return payload.output_text;
+  const parts = [];
+  for (const item of payload.output || []) {
+    for (const content of item.content || []) {
+      if (content.type === "output_text" && content.text) parts.push(content.text);
+    }
+  }
+  return parts.join("\n");
+}
+
+function safeArray(value, fallback = []) {
+  return Array.isArray(value) && value.length ? value : fallback;
+}
+
+function mergeAiReport(baseReport, aiReport) {
+  if (!aiReport || typeof aiReport !== "object") return baseReport;
+  const next = {
+    ...baseReport,
+    summary: typeof aiReport.summary === "string" ? aiReport.summary : baseReport.summary,
+    situation: typeof aiReport.situation === "string" ? aiReport.situation : baseReport.situation,
+    tendency: typeof aiReport.tendency === "string" ? aiReport.tendency : baseReport.tendency,
+    inference: safeArray(aiReport.inference, baseReport.inference),
+    suggestions: safeArray(aiReport.suggestions, baseReport.suggestions),
+    stageAdvice: safeArray(aiReport.stageAdvice, baseReport.stageAdvice),
+    termGlossary: safeArray(aiReport.termGlossary, baseReport.termGlossary),
+    generatedBy: "openai",
+  };
+  if (aiReport.oracle && typeof aiReport.oracle === "object") {
+    next.oracle = { ...baseReport.oracle, ...aiReport.oracle };
+  }
+  return next;
+}
+
+async function generateAiReport(baseReport, values, method) {
+  if (!process.env.OPENAI_API_KEY) return baseReport;
+  const model = process.env.OPENAI_MODEL || "gpt-4.1-mini";
+  const input = {
+    method,
+    values: {
+      question: values.question,
+      concernType: values.concernType,
+      timeRange: values.timeRange,
+      focusProblem: values.focusProblem,
+      readingFocus: values.readingFocus,
+      reportTone: values.reportTone,
+      detailLevel: values.detailLevel,
+      background: values.background,
+      birthDate: values.birthDate,
+      birthTime: values.birthTime,
+      birthPlace: values.birthPlace,
+      gender: values.gender,
+      castTime: values.castTime,
+      numberSeed: values.numberSeed,
+      deadline: values.deadline,
+      location: values.location,
+      options: values.options,
+      nameBase: values.nameBase,
+      style: values.style,
+    },
+    baseReport,
+  };
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+    body: JSON.stringify({
+      model,
+      instructions: AI_REPORT_INSTRUCTIONS,
+      input: `请基于以下输入生成更具体的商业级中文术数参考报告。只返回 JSON。\n${JSON.stringify(input)}`,
+      temperature: 0.75,
+      max_output_tokens: 2600,
+    }),
+  });
+  if (!response.ok) throw new Error(`OpenAI request failed: ${response.status}`);
+  const payload = await response.json();
+  const parsed = JSON.parse(stripCodeFence(extractResponseText(payload)));
+  return mergeAiReport(baseReport, parsed);
+}
 async function ensureStorage() {
   await mkdir(storageDir, { recursive: true });
   for (const file of Object.values(files)) {
@@ -179,7 +271,12 @@ async function createReport(req, res) {
   const method = sanitizeMethod(body.method);
   const errors = validateIntake(values);
   if (Object.keys(errors).length) return sendJson(res, 422, { ok: false, errors });
-  const report = buildReport(values, method);
+  let report = buildReport(values, method);
+  try {
+    report = await generateAiReport(report, values, method);
+  } catch (error) {
+    report = { ...report, generatedBy: "rules", aiError: "AI_GENERATION_FALLBACK" };
+  }
   const rows = await readList(files.reports);
   rows.unshift({ id: report.id, createdAt: report.createdAt, userId: session?.role === "user" ? session.userId : null, methodId: method.id, methodName: method.name, question: values.question, concernType: values.concernType, report });
   await saveList(files.reports, rows.slice(0, 500));
@@ -248,7 +345,7 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
     if (req.method === "OPTIONS") return sendJson(res, 204, {});
-    if (req.method === "GET" && url.pathname === "/api/health") return sendJson(res, 200, { ok: true, service: "xuanxue-api" });
+    if (req.method === "GET" && url.pathname === "/api/health") return sendJson(res, 200, { ok: true, service: "xuanxue-api", ai: process.env.OPENAI_API_KEY ? "configured" : "not-configured", model: process.env.OPENAI_MODEL || "gpt-4.1-mini" });
     if (req.method === "POST" && url.pathname === "/api/auth/register") return register(req, res);
     if (req.method === "POST" && url.pathname === "/api/auth/login") return login(req, res);
     if (req.method === "POST" && url.pathname === "/api/admin/login") return adminLogin(req, res);
@@ -269,3 +366,4 @@ await ensureStorage();
 server.listen(port, "127.0.0.1", () => {
   console.log(`xuanxue api listening on http://127.0.0.1:${port}`);
 });
+
