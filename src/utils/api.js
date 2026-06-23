@@ -88,3 +88,25 @@ export async function getAdminOverview(session, filters = {}) {
   const query = params.toString();
   return request(`/api/admin/overview${query ? `?${query}` : ""}`, { headers: authHeaders(session) });
 }
+export async function updateAdminUser(userId, values, session) {
+  return request(`/api/admin/users/${encodeURIComponent(userId)}`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(values),
+  });
+}
+
+export async function markAdminOrderPaid(orderId, session) {
+  return request(`/api/admin/orders/${encodeURIComponent(orderId)}/mark-paid`, {
+    method: "POST",
+    headers: authHeaders(session),
+  });
+}
+
+export async function reviewAdminReport(reportId, values, session) {
+  return request(`/api/admin/reports/${encodeURIComponent(reportId)}/review`, {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify(values),
+  });
+}

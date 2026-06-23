@@ -1908,3 +1908,53 @@ input:focus, textarea:focus, select:focus {
     grid-template-columns: 1fr;
   }
 }
+.admin-record-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-inline-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.admin-inline-controls input,
+.admin-review-box input,
+.admin-inline-controls select {
+  min-height: 38px;
+  border: 1px solid rgba(212, 175, 55, 0.26);
+  background: rgba(0, 0, 0, 0.24);
+  color: var(--text);
+  padding: 0 10px;
+  max-width: 130px;
+}
+
+.admin-review-box {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-review-box input {
+  max-width: none;
+  width: 100%;
+}
+
+.compact-controls .btn {
+  min-height: 34px;
+  padding: 8px 12px;
+}
+
+.admin-status-pill {
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid rgba(212, 175, 55, 0.3);
+  background: rgba(212, 175, 55, 0.1);
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 900;
+}

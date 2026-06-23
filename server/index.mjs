@@ -255,7 +255,7 @@ function sanitizeMethod(method = {}) {
 function cents(amount) { return (Number(amount || 0) / 100).toFixed(2); }
 
 function reportRow(row) {
-  return { id: row.id, createdAt: row.createdAt, methodName: row.methodName, question: row.question, title: row.report?.title, summary: row.report?.summary };
+  return { id: row.id, createdAt: row.createdAt, methodName: row.methodName, question: row.question, title: row.report?.title, summary: row.report?.summary, adminReview: row.report?.adminReview || null };
 }
 
 function userRow(row) {
@@ -263,7 +263,7 @@ function userRow(row) {
 }
 
 function orderRow(row) {
-  return { id: row.id, createdAt: row.createdAt, planId: row.planId, planName: row.planName, amount: row.amount, amountText: `¥${cents(row.amount)}`, status: row.status };
+  return { id: row.id, userId: row.userId, createdAt: row.createdAt, planId: row.planId, planName: row.planName, amount: row.amount, amountText: `¥${cents(row.amount)}`, status: row.status };
 }
 
 async function register(req, res) {
@@ -383,6 +383,7 @@ async function createOrder(req, res) {
   const orders = await readList(files.orders);
   orders.unshift(order);
   await saveList(files.orders, orders);
+  if (plan.amount === 0) await applyPlanBenefits(order);
   sendJson(res, 201, { ok: true, order: orderRow(order) });
 }
 
@@ -397,10 +398,15 @@ async function mockPay(req, res, orderId) {
   order.updatedAt = new Date().toISOString();
   order.paidAt = order.updatedAt;
   await saveList(files.orders, orders);
+  await applyPlanBenefits(order);
+  sendJson(res, 200, { ok: true, order: orderRow(order) });
+}
+
+async function applyPlanBenefits(order) {
   const plan = PLANS[order.planId];
   if (plan?.credits) {
     const users = await readList(files.users);
-    const user = users.find((item) => item.id === session.userId);
+    const user = users.find((item) => item.id === order.userId);
     if (user) {
       user.credits = Number(user.credits || 0) + plan.credits;
       await saveList(files.users, users);
@@ -409,12 +415,57 @@ async function mockPay(req, res, orderId) {
   if (plan?.type === "membership") {
     const memberships = await readList(files.memberships);
     const endAt = new Date(Date.now() + plan.days * 86400000).toISOString();
-    memberships.unshift({ id: id("mem"), userId: session.userId, planId: order.planId, planName: plan.name, startAt: order.paidAt, endAt, status: "active" });
+    memberships.unshift({ id: id("mem"), userId: order.userId, planId: order.planId, planName: plan.name, startAt: order.paidAt || new Date().toISOString(), endAt, status: "active" });
     await saveList(files.memberships, memberships.slice(0, 500));
   }
-  sendJson(res, 200, { ok: true, order: orderRow(order) });
 }
 
+async function updateAdminUser(req, res, userId) {
+  const session = requireSession(req, res);
+  if (!session || session.role !== "admin") return sendJson(res, 403, { ok: false, message: "需要管理员权限。" });
+  const body = await readJson(req);
+  const users = await readList(files.users);
+  const user = users.find((item) => item.id === userId);
+  if (!user) return sendJson(res, 404, { ok: false, message: "用户不存在。" });
+  const creditsDelta = Number(body.creditsDelta || 0);
+  const status = String(body.status || "").trim();
+  if (!Number.isFinite(creditsDelta) || Math.abs(creditsDelta) > 999) return sendJson(res, 422, { ok: false, message: "次数调整必须在 -999 到 999 之间。" });
+  if (status && !["active", "disabled"].includes(status)) return sendJson(res, 422, { ok: false, message: "用户状态只支持 active 或 disabled。" });
+  user.credits = Math.max(Number(user.credits || 0) + creditsDelta, 0);
+  user.status = status || user.status || "active";
+  await saveList(files.users, users);
+  sendJson(res, 200, { ok: true, user: userRow(user), message: "用户权益已更新。" });
+}
+
+async function markAdminOrderPaid(req, res, orderId) {
+  const session = requireSession(req, res);
+  if (!session || session.role !== "admin") return sendJson(res, 403, { ok: false, message: "需要管理员权限。" });
+  const orders = await readList(files.orders);
+  const order = orders.find((item) => item.id === orderId);
+  if (!order) return sendJson(res, 404, { ok: false, message: "订单不存在。" });
+  if (order.status === "paid") return sendJson(res, 200, { ok: true, order: orderRow(order), message: "订单已是已支付状态。" });
+  order.status = "paid";
+  order.updatedAt = new Date().toISOString();
+  order.paidAt = order.updatedAt;
+  await saveList(files.orders, orders);
+  await applyPlanBenefits(order);
+  sendJson(res, 200, { ok: true, order: orderRow(order), message: "订单已确认并发放权益。" });
+}
+
+async function reviewAdminReport(req, res, reportId) {
+  const session = requireSession(req, res);
+  if (!session || session.role !== "admin") return sendJson(res, 403, { ok: false, message: "需要管理员权限。" });
+  const body = await readJson(req);
+  const status = String(body.status || "pending").trim();
+  const note = String(body.note || "").slice(0, 180);
+  if (!["pending", "approved", "needs_review", "hidden"].includes(status)) return sendJson(res, 422, { ok: false, message: "报告状态不正确。" });
+  const reports = await readList(files.reports);
+  const row = reports.find((item) => item.id === reportId);
+  if (!row) return sendJson(res, 404, { ok: false, message: "报告不存在。" });
+  row.report = { ...(row.report || {}), adminReview: { status, note, reviewedAt: new Date().toISOString(), reviewer: session.email || "admin" } };
+  await saveList(files.reports, reports);
+  sendJson(res, 200, { ok: true, report: reportRow(row), message: "报告审核状态已更新。" });
+}
 async function adminOverview(req, res) {
   const session = requireSession(req, res);
   if (!session || session.role !== "admin") return sendJson(res, 403, { ok: false, message: "需要管理员权限。" });
@@ -449,6 +500,12 @@ const server = http.createServer(async (req, res) => {
     const match = url.pathname.match(/^\/api\/orders\/([^/]+)\/mock-pay$/);
     if (req.method === "POST" && match) return mockPay(req, res, match[1]);
     if (req.method === "GET" && url.pathname === "/api/admin/overview") return adminOverview(req, res);
+    const adminUserMatch = url.pathname.match(/^\/api\/admin\/users\/([^/]+)$/);
+    if (req.method === "POST" && adminUserMatch) return updateAdminUser(req, res, adminUserMatch[1]);
+    const adminOrderMatch = url.pathname.match(/^\/api\/admin\/orders\/([^/]+)\/mark-paid$/);
+    if (req.method === "POST" && adminOrderMatch) return markAdminOrderPaid(req, res, adminOrderMatch[1]);
+    const adminReportMatch = url.pathname.match(/^\/api\/admin\/reports\/([^/]+)\/review$/);
+    if (req.method === "POST" && adminReportMatch) return reviewAdminReport(req, res, adminReportMatch[1]);
     sendJson(res, 404, { ok: false, message: "not found" });
   } catch (error) {
     sendJson(res, 500, { ok: false, message: error.message });

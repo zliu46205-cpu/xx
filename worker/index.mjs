@@ -380,11 +380,11 @@ async function getAccount(request, env) {
 function formatReportRecord(item) {
   let report = {};
   try { report = JSON.parse(item.report_json || "{}"); } catch {}
-  return { id: item.id, createdAt: item.created_at, methodName: item.method_name, question: item.question, title: report.title, summary: report.summary };
+  return { id: item.id, createdAt: item.created_at, methodName: item.method_name, question: item.question, title: report.title, summary: report.summary, adminReview: report.adminReview || null };
 }
 
 function formatOrderRecord(item) {
-  return { id: item.id, createdAt: item.created_at, planId: item.plan_id, planName: item.plan_name, amount: item.amount, amountText: `¥${centsToYuan(item.amount)}`, status: item.status };
+  return { id: item.id, userId: item.user_id, createdAt: item.created_at, planId: item.plan_id, planName: item.plan_name, amount: item.amount, amountText: `¥${centsToYuan(item.amount)}`, status: item.status };
 }
 
 function formatUserRecord(item) {
@@ -504,17 +504,79 @@ async function markMockPaid(request, env, orderId) {
   if (order.status === "paid") {
     return sendJson({ ok: true, order: { ...formatOrderRecord(order), status: "paid" } });
   }
-  const plan = PLANS[order.plan_id];
   const now = new Date().toISOString();
   await env.DB.prepare(`UPDATE orders SET status = 'paid', updated_at = ?, paid_at = ? WHERE id = ?`).bind(now, now, orderId).run();
-  if (plan?.credits) await env.DB.prepare(`UPDATE users SET credits = COALESCE(credits, 0) + ? WHERE id = ?`).bind(plan.credits, auth.session.userId).run().catch(() => null);
-  if (plan?.type === "membership") {
-    const endAt = new Date(Date.now() + plan.days * 86400000).toISOString();
-    await env.DB.prepare(`INSERT INTO memberships (id, user_id, plan_id, plan_name, start_at, end_at, status) VALUES (?, ?, ?, ?, ?, ?, 'active')`).bind(makeId("mem"), auth.session.userId, order.plan_id, plan.name, now, endAt).run().catch(() => null);
-  }
+  await applyPlanBenefits(env, order, now);
   return sendJson({ ok: true, order: { ...formatOrderRecord({ ...order, status: "paid" }), status: "paid" } });
 }
 
+async function applyPlanBenefits(env, order, now) {
+  const plan = PLANS[order.plan_id];
+  if (plan?.credits) {
+    await env.DB.prepare(`UPDATE users SET credits = COALESCE(credits, 0) + ? WHERE id = ?`).bind(plan.credits, order.user_id).run().catch(() => null);
+  }
+  if (plan?.type === "membership") {
+    const endAt = new Date(Date.now() + plan.days * 86400000).toISOString();
+    await env.DB.prepare(`INSERT INTO memberships (id, user_id, plan_id, plan_name, start_at, end_at, status) VALUES (?, ?, ?, ?, ?, ?, 'active')`).bind(makeId("mem"), order.user_id, order.plan_id, plan.name, now, endAt).run().catch(() => null);
+  }
+}
+
+async function updateAdminUser(request, env, userId) {
+  const missingDb = assertDb(env);
+  if (missingDb) return missingDb;
+  const auth = await requireAdmin(request, env);
+  if (auth.response) return auth.response;
+  const body = await readJson(request);
+  const creditsDelta = Number(body.creditsDelta || 0);
+  const status = String(body.status || "").trim();
+  if (!Number.isFinite(creditsDelta) || Math.abs(creditsDelta) > 999) {
+    return sendJson({ ok: false, message: "次数调整必须在 -999 到 999 之间。" }, 422);
+  }
+  if (status && !["active", "disabled"].includes(status)) {
+    return sendJson({ ok: false, message: "用户状态只支持 active 或 disabled。" }, 422);
+  }
+  const current = await env.DB.prepare(`SELECT id, credits, status FROM users WHERE id = ?`).bind(userId).first();
+  if (!current) return sendJson({ ok: false, message: "用户不存在。" }, 404);
+  const nextCredits = Math.max(Number(current.credits || 0) + creditsDelta, 0);
+  const nextStatus = status || current.status || "active";
+  await env.DB.prepare(`UPDATE users SET credits = ?, status = ? WHERE id = ?`).bind(nextCredits, nextStatus, userId).run();
+  const user = await env.DB.prepare(`SELECT id, created_at, email, name, role, status, credits FROM users WHERE id = ?`).bind(userId).first();
+  return sendJson({ ok: true, user: formatUserRecord(user), message: "用户权益已更新。" });
+}
+
+async function markAdminOrderPaid(request, env, orderId) {
+  const missingDb = assertDb(env);
+  if (missingDb) return missingDb;
+  const auth = await requireAdmin(request, env);
+  if (auth.response) return auth.response;
+  const order = await env.DB.prepare(`SELECT * FROM orders WHERE id = ?`).bind(orderId).first();
+  if (!order) return sendJson({ ok: false, message: "订单不存在。" }, 404);
+  if (order.status === "paid") return sendJson({ ok: true, order: formatOrderRecord(order), message: "订单已是已支付状态。" });
+  const now = new Date().toISOString();
+  await env.DB.prepare(`UPDATE orders SET status = 'paid', updated_at = ?, paid_at = ? WHERE id = ?`).bind(now, now, orderId).run();
+  await applyPlanBenefits(env, order, now);
+  return sendJson({ ok: true, order: { ...formatOrderRecord({ ...order, status: "paid" }), status: "paid" }, message: "订单已确认并发放权益。" });
+}
+
+async function reviewAdminReport(request, env, reportId) {
+  const missingDb = assertDb(env);
+  if (missingDb) return missingDb;
+  const auth = await requireAdmin(request, env);
+  if (auth.response) return auth.response;
+  const body = await readJson(request);
+  const status = String(body.status || "pending").trim();
+  const note = String(body.note || "").slice(0, 180);
+  if (!["pending", "approved", "needs_review", "hidden"].includes(status)) {
+    return sendJson({ ok: false, message: "报告状态不正确。" }, 422);
+  }
+  const row = await env.DB.prepare(`SELECT * FROM reports WHERE id = ?`).bind(reportId).first();
+  if (!row) return sendJson({ ok: false, message: "报告不存在。" }, 404);
+  let report = {};
+  try { report = JSON.parse(row.report_json || "{}"); } catch {}
+  report.adminReview = { status, note, reviewedAt: new Date().toISOString(), reviewer: auth.session.email || "admin" };
+  await env.DB.prepare(`UPDATE reports SET report_json = ? WHERE id = ?`).bind(JSON.stringify(report), reportId).run();
+  return sendJson({ ok: true, report: formatReportRecord({ ...row, report_json: JSON.stringify(report) }), message: "报告审核状态已更新。" });
+}
 async function getAdminOverview(request, env) {
   const missingDb = assertDb(env);
   if (missingDb) return missingDb;
@@ -569,6 +631,12 @@ async function handleApi(request, env) {
   const mockPayMatch = url.pathname.match(/^\/api\/orders\/([^/]+)\/mock-pay$/);
   if (request.method === "POST" && mockPayMatch) return markMockPaid(request, env, mockPayMatch[1]);
   if (request.method === "GET" && url.pathname === "/api/admin/overview") return getAdminOverview(request, env);
+  const adminUserMatch = url.pathname.match(/^\/api\/admin\/users\/([^/]+)$/);
+  if (request.method === "POST" && adminUserMatch) return updateAdminUser(request, env, adminUserMatch[1]);
+  const adminOrderMatch = url.pathname.match(/^\/api\/admin\/orders\/([^/]+)\/mark-paid$/);
+  if (request.method === "POST" && adminOrderMatch) return markAdminOrderPaid(request, env, adminOrderMatch[1]);
+  const adminReportMatch = url.pathname.match(/^\/api\/admin\/reports\/([^/]+)\/review$/);
+  if (request.method === "POST" && adminReportMatch) return reviewAdminReport(request, env, adminReportMatch[1]);
   return sendJson({ ok: false, message: "not found" }, 404);
 }
 
