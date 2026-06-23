@@ -1,4 +1,4 @@
-import http from "node:http";
+﻿import http from "node:http";
 import crypto from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -348,6 +348,15 @@ async function listReports(req, res) {
   sendJson(res, 200, { ok: true, reports: visible.slice(0, limit).map(reportRow) });
 }
 
+async function reportDetail(req, res, reportId) {
+  const session = requireSession(req, res);
+  if (!session) return;
+  const rows = await readList(files.reports);
+  const row = rows.find((item) => item.id === reportId && (session.role === "admin" || item.userId === session.userId));
+  if (!row) return sendJson(res, 404, { ok: false, message: "???????????" });
+  sendJson(res, 200, { ok: true, report: row.report, record: reportRow(row) });
+}
+
 async function account(req, res) {
   const session = requireSession(req, res);
   if (!session) return;
@@ -417,6 +426,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/admin/login") return adminLogin(req, res);
     if (req.method === "GET" && url.pathname === "/api/account") return account(req, res);
     if (req.method === "GET" && url.pathname === "/api/reports") return listReports(req, res);
+    const reportMatch = url.pathname.match(/^\/api\/reports\/([^/]+)$/);
+    if (req.method === "GET" && reportMatch) return reportDetail(req, res, reportMatch[1]);
     if (req.method === "POST" && url.pathname === "/api/reports") return createReport(req, res);
     if (req.method === "POST" && url.pathname === "/api/orders") return createOrder(req, res);
     const match = url.pathname.match(/^\/api\/orders\/([^/]+)\/mock-pay$/);
@@ -432,6 +443,4 @@ await ensureStorage();
 server.listen(port, "127.0.0.1", () => {
   console.log(`xuanxue api listening on http://127.0.0.1:${port}`);
 });
-
-
 

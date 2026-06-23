@@ -62,6 +62,10 @@ export async function getAccount(session) {
   return request("/api/account", { headers: authHeaders(session) });
 }
 
+export async function getReportDetail(reportId, session) {
+  return request(`/api/reports/${encodeURIComponent(reportId)}`, { headers: authHeaders(session) });
+}
+
 export async function createOrder(planId, session) {
   return request("/api/orders", {
     method: "POST",

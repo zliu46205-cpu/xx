@@ -1,11 +1,34 @@
 ﻿import { useEffect, useState } from "react";
 import { Button, Notice } from "../components/Primitives";
 import { PageHeader } from "../components/Layout";
-import { getAccount } from "../utils/api";
+import { getAccount, getReportDetail } from "../utils/api";
+
+function formatReportText(report) {
+  if (!report) return "";
+  const lines = [
+    report.title,
+    report.question,
+    "",
+    "简要结论",
+    report.summary,
+    "",
+    "分析依据",
+    ...(report.basis || []),
+    "",
+    "象征推演",
+    ...(report.inference || []),
+    "",
+    "现实建议",
+    ...(report.suggestions || []),
+  ];
+  return lines.filter(Boolean).join("\n");
+}
 
 export function AccountPage({ session, setRoute }) {
   const [account, setAccount] = useState(null);
   const [notice, setNotice] = useState("");
+  const [selectedReport, setSelectedReport] = useState(null);
+  const [detailStatus, setDetailStatus] = useState("idle");
 
   useEffect(() => {
     if (!session) return;
@@ -13,6 +36,37 @@ export function AccountPage({ session, setRoute }) {
       .then((payload) => setAccount(payload))
       .catch((error) => setNotice(error.message || "用户中心加载失败"));
   }, [session]);
+
+  async function openReport(reportId) {
+    setDetailStatus("loading");
+    setNotice("");
+    try {
+      const payload = await getReportDetail(reportId, session);
+      setSelectedReport(payload.report);
+      setNotice("报告详情已打开。历史报告只允许本人或管理员查看。");
+    } catch (error) {
+      setNotice(error.message || "报告详情加载失败。");
+    } finally {
+      setDetailStatus("idle");
+    }
+  }
+
+  async function copyReport() {
+    if (!selectedReport) return;
+    await navigator.clipboard?.writeText(formatReportText(selectedReport));
+    setNotice("报告正文已复制。");
+  }
+
+  function exportReport() {
+    if (!selectedReport) return;
+    const blob = new Blob([formatReportText(selectedReport)], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `xuanxue-report-${selectedReport.id || "history"}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
 
   if (!session) {
     return (
@@ -50,9 +104,12 @@ export function AccountPage({ session, setRoute }) {
         <div className="account-panel">
           <div className="section-title compact"><span>最近报告</span><h2>报告记录</h2></div>
           {account?.reports?.length ? account.reports.map((item) => (
-            <article className="record-row" key={item.id}>
+            <article className="record-row record-row-action" key={item.id}>
               <div><strong>{item.title || item.methodName || item.method_name}</strong><p>{item.question}</p></div>
-              <small>{item.createdAt || item.created_at}</small>
+              <div className="record-actions">
+                <small>{item.createdAt || item.created_at}</small>
+                <Button type="button" variant="ghost" onClick={() => openReport(item.id)} disabled={detailStatus === "loading"}>查看</Button>
+              </div>
             </article>
           )) : <Notice>暂无报告。可以先去免费体验生成第一份报告。</Notice>}
         </div>
@@ -67,6 +124,26 @@ export function AccountPage({ session, setRoute }) {
           <div className="form-actions"><Button type="button" onClick={() => setRoute("billing")}>查看套餐</Button></div>
         </div>
       </section>
+
+      {selectedReport ? (
+        <section className="account-report-detail">
+          <div className="section-title compact"><span>历史报告详情</span><h2>{selectedReport.title}</h2><p>{selectedReport.question}</p></div>
+          <div className="report-detail-grid">
+            <article><span>简要结论</span><p>{selectedReport.summary}</p></article>
+            <article><span>趋势倾向</span><p>{selectedReport.tendency}</p></article>
+          </div>
+          <div className="report-detail-columns">
+            <article><span>分析依据</span><ul>{(selectedReport.basis || []).map((item) => <li key={item}>{item}</li>)}</ul></article>
+            <article><span>象征推演</span><ul>{(selectedReport.inference || []).slice(0, 6).map((item) => <li key={item}>{item}</li>)}</ul></article>
+            <article><span>现实建议</span><ul>{(selectedReport.suggestions || []).slice(0, 7).map((item) => <li key={item}>{item}</li>)}</ul></article>
+          </div>
+          <div className="form-actions">
+            <Button type="button" onClick={copyReport}>复制报告</Button>
+            <Button type="button" variant="secondary" onClick={exportReport}>导出 TXT</Button>
+            <Button type="button" variant="ghost" onClick={() => setSelectedReport(null)}>收起</Button>
+          </div>
+        </section>
+      ) : null}
       <Notice>{notice}</Notice>
     </>
   );

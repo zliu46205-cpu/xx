@@ -1,4 +1,4 @@
-import { buildReport, validateIntake } from "../src/utils/report.js";
+﻿import { buildReport, validateIntake } from "../src/utils/report.js";
 
 const jsonHeaders = {
   "content-type": "application/json; charset=utf-8",
@@ -452,6 +452,20 @@ async function listReports(request, env) {
   return sendJson({ ok: true, reports: (query.results || []).map(formatReportRecord) });
 }
 
+async function getReportDetail(request, env, reportId) {
+  const missingDb = assertDb(env);
+  if (missingDb) return missingDb;
+  const auth = await requireUser(request, env);
+  if (auth.response) return auth.response;
+  const row = auth.session.role === "admin"
+    ? await env.DB.prepare(`SELECT id, created_at, method_name, question, report_json FROM reports WHERE id = ?`).bind(reportId).first()
+    : await env.DB.prepare(`SELECT id, created_at, method_name, question, report_json FROM reports WHERE id = ? AND user_id = ?`).bind(reportId, auth.session.userId).first();
+  if (!row) return sendJson({ ok: false, message: "???????????" }, 404);
+  let report = {};
+  try { report = JSON.parse(row.report_json || "{}"); } catch {}
+  return sendJson({ ok: true, report: { ...report, id: report.id || row.id, createdAt: report.createdAt || row.created_at }, record: formatReportRecord(row) });
+}
+
 async function createOrder(request, env) {
   const missingDb = assertDb(env);
   if (missingDb) return missingDb;
@@ -534,6 +548,8 @@ async function handleApi(request, env) {
   if (request.method === "POST" && url.pathname === "/api/admin/login") return loginAdmin(request, env);
   if (request.method === "GET" && url.pathname === "/api/account") return getAccount(request, env);
   if (request.method === "GET" && url.pathname === "/api/reports") return listReports(request, env);
+  const reportDetailMatch = url.pathname.match(/^\/api\/reports\/([^/]+)$/);
+  if (request.method === "GET" && reportDetailMatch) return getReportDetail(request, env, reportDetailMatch[1]);
   if (request.method === "POST" && url.pathname === "/api/reports") return createReport(request, env);
   if (request.method === "POST" && url.pathname === "/api/orders") return createOrder(request, env);
   const mockPayMatch = url.pathname.match(/^\/api\/orders\/([^/]+)\/mock-pay$/);
@@ -561,7 +577,4 @@ export default {
     }
   },
 };
-
-
-
 
