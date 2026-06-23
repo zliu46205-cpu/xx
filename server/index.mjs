@@ -402,6 +402,12 @@ async function mockPay(req, res, orderId) {
       await saveList(files.users, users);
     }
   }
+  if (plan?.type === "membership") {
+    const memberships = await readList(files.memberships);
+    const endAt = new Date(Date.now() + plan.days * 86400000).toISOString();
+    memberships.unshift({ id: id("mem"), userId: session.userId, planId: order.planId, planName: plan.name, startAt: order.paidAt, endAt, status: "active" });
+    await saveList(files.memberships, memberships.slice(0, 500));
+  }
   sendJson(res, 200, { ok: true, order: orderRow(order) });
 }
 

@@ -1,7 +1,7 @@
-﻿import { useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Button, Notice } from "../components/Primitives";
 import { PageHeader } from "../components/Layout";
-import { createOrder, markMockPaid } from "../utils/api";
+import { createOrder, getAccount, markMockPaid } from "../utils/api";
 
 export const plans = [
   { id: "free", name: "免费体验", price: 0, unit: "每日 1 次", credits: 1, badge: "拉新入口", desc: "问题归类、主象提示、简版建议和边界提醒。", features: ["简版报告", "基础术数选择", "可复制摘要"] },
@@ -11,11 +11,29 @@ export const plans = [
   { id: "review", name: "人工复核预约", price: 29900, unit: "每次", credits: 0, badge: "服务层", desc: "后续接入人工服务，不做恐吓式消灾收费。", features: ["人工校对", "补充追问", "报告修订", "预约制"] },
 ];
 
+function formatCredits(account) {
+  return Number(account?.user?.credits ?? account?.stats?.credits ?? 0);
+}
+
 export function BillingPage({ session, setRoute }) {
   const [selected, setSelected] = useState("single");
   const [notice, setNotice] = useState("");
   const [order, setOrder] = useState(null);
+  const [account, setAccount] = useState(null);
   const [status, setStatus] = useState("idle");
+
+  useEffect(() => {
+    if (!session) return;
+    getAccount(session).then(setAccount).catch(() => null);
+  }, [session]);
+
+  async function refreshAccount(message) {
+    if (!session) return null;
+    const payload = await getAccount(session);
+    setAccount(payload);
+    if (message) setNotice(message);
+    return payload;
+  }
 
   async function buy(planId) {
     if (!session) {
@@ -28,7 +46,7 @@ export function BillingPage({ session, setRoute }) {
     try {
       const payload = await createOrder(planId, session);
       setOrder(payload.order);
-      setNotice("订单已创建。当前为支付系统骨架，未接入真实扣款。配置支付渠道后可跳转收银台。");
+      await refreshAccount("订单已创建。当前为测试支付流程，真实上线前需要替换为支付平台收银台和回调验签。");
     } catch (error) {
       setNotice(error.message || "订单创建失败");
     } finally {
@@ -40,9 +58,13 @@ export function BillingPage({ session, setRoute }) {
     if (!order || !session) return;
     setStatus("loading");
     try {
+      const beforeCredits = formatCredits(account);
       const payload = await markMockPaid(order.id, session);
       setOrder(payload.order);
-      setNotice("模拟支付已完成。真实上线前必须替换为支付平台回调验签。");
+      const nextAccount = await refreshAccount();
+      const afterCredits = formatCredits(nextAccount);
+      const diff = Math.max(afterCredits - beforeCredits, 0);
+      setNotice(diff ? `模拟支付已完成，账户增加 ${diff} 次，当前剩余 ${afterCredits} 次。` : `订单已是已支付状态，当前剩余 ${afterCredits} 次。`);
     } catch (error) {
       setNotice(error.message || "当前环境未开启模拟支付。真实支付需配置商户密钥和回调。");
     } finally {
@@ -50,9 +72,21 @@ export function BillingPage({ session, setRoute }) {
     }
   }
 
+  const credits = formatCredits(account);
+  const membership = account?.membership;
+  const selectedPlan = plans.find((plan) => plan.id === selected) || plans[1];
+
   return (
     <>
       <PageHeader eyebrow="会员与支付" title="免费体验先建立信任，付费服务按价值分层" desc="当前页面是商业化支付系统骨架：套餐、订单、支付状态和权益都已规划。真实扣款需要接入 Stripe、微信支付或支付宝，并完成服务条款、退款规则和回调验签。" />
+
+      <section className="billing-status-strip">
+        <article><span>当前账户</span><strong>{session ? session.email || session.name : "未登录"}</strong><p>{session ? "订单和次数会保存到当前账号。" : "登录后才能购买套餐。"}</p></article>
+        <article><span>剩余次数</span><strong>{session ? credits : "--"}</strong><p>标准报告扣 1 次，深度报告扣 3 次。</p></article>
+        <article><span>会员状态</span><strong>{membership ? membership.plan_name || membership.planName : "未开通"}</strong><p>{membership?.end_at || membership?.endAt ? `到期：${membership.end_at || membership.endAt}` : "会员套餐会在支付成功后显示。"}</p></article>
+        <article><span>当前选择</span><strong>{selectedPlan.name}</strong><p>{selectedPlan.desc}</p></article>
+      </section>
+
       <section className="billing-grid">
         {plans.map((plan) => (
           <article className={`billing-card ${selected === plan.id ? "selected" : ""}`} key={plan.id}>
@@ -72,7 +106,8 @@ export function BillingPage({ session, setRoute }) {
           <p>{order ? `订单号：${order.id} · 状态：${order.status} · 金额：${order.amountText || `¥${(order.amount / 100).toFixed(2)}`}` : "选择套餐后会生成订单。真实支付接入后这里会跳转支付收银台。"}</p>
         </div>
         <div className="form-actions">
-          <Button type="button" variant="secondary" onClick={simulatePay} disabled={!order || status === "loading"}>模拟支付成功</Button>
+          <Button type="button" variant="secondary" onClick={simulatePay} disabled={!order || status === "loading"}>{status === "loading" ? "处理中..." : "模拟支付成功"}</Button>
+          <Button type="button" variant="ghost" onClick={() => refreshAccount("账户状态已刷新。")} disabled={!session || status === "loading"}>刷新权益</Button>
           <Button type="button" variant="ghost" onClick={() => setRoute("account")}>查看用户中心</Button>
         </div>
       </section>
@@ -80,4 +115,3 @@ export function BillingPage({ session, setRoute }) {
     </>
   );
 }
-
