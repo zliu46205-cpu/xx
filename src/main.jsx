@@ -63,7 +63,7 @@ function App() {
       return <MethodDetailPage setRoute={navigate} selectedMethod={selectedMethod} selectMethod={setSelectedMethod} />;
     }
     if (route === "consult") {
-      return <ConsultPage selectedMethod={selectedMethod} selectMethod={setSelectedMethod} session={session} />;
+      return <ConsultPage selectedMethod={selectedMethod} selectMethod={setSelectedMethod} session={session} setRoute={navigate} />;
     }
     if (route === "billing") {
       return <BillingPage session={session} setRoute={navigate} />;

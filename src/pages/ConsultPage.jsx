@@ -52,7 +52,7 @@ const localFieldLabels = {
   background: "补充背景",
 };
 
-export function ConsultPage({ selectedMethod, selectMethod, session }) {
+export function ConsultPage({ selectedMethod, selectMethod, session, setRoute }) {
   const method = useMemo(() => methods.find((item) => item.id === selectedMethod) || methods[0], [selectedMethod]);
   const [values, setValues] = useState({
     question: "",
@@ -169,6 +169,12 @@ export function ConsultPage({ selectedMethod, selectMethod, session }) {
     setReport(null);
     setStatus("loading");
     try {
+      if (values.reportTier !== "free" && !session) {
+        setNotice("标准报告和深度报告需要登录并消耗次数。请先登录，或选择免费简版。");
+        setRoute?.("login");
+        setStatus("idle");
+        return;
+      }
       const payload = await createReport(values, method, session);
       setReport(payload.report);
       setStatus("ready");
@@ -176,7 +182,24 @@ export function ConsultPage({ selectedMethod, selectMethod, session }) {
       setNotice(session ? "报告已生成并保存到你的用户中心。" : "报告已生成。登录后可以保存到用户中心并查看历史。");
       const historyPayload = await listReports(6, session);
       setReportHistory(historyPayload.reports || []);
-    } catch {
+    } catch (error) {
+      if (error?.payload?.code === "INSUFFICIENT_CREDITS") {
+        setNotice(error.message || "剩余次数不足，请先购买套餐或选择免费简版。");
+        setRoute?.("billing");
+        setStatus("idle");
+        return;
+      }
+      if (error?.payload?.code === "LOGIN_REQUIRED") {
+        setNotice(error.message || "请先登录后再生成标准或深度报告。");
+        setRoute?.("login");
+        setStatus("idle");
+        return;
+      }
+      if (error?.payload?.code === "PAID_REPORT_AI_UNAVAILABLE") {
+        setNotice(error.message || "深度生成服务暂时不可用，本次未扣次数。请稍后重试，或先生成免费简版。");
+        setStatus("idle");
+        return;
+      }
       const fallbackReport = buildReport(values, method);
       setReport(fallbackReport);
       setStatus("ready");
@@ -520,5 +543,4 @@ function ReportPanel({ report, copySummary, exportText, regenerate }) {
     </article>
   );
 }
-
 

@@ -5,9 +5,9 @@ import { createOrder, markMockPaid } from "../utils/api";
 
 export const plans = [
   { id: "free", name: "免费体验", price: 0, unit: "每日 1 次", credits: 1, badge: "拉新入口", desc: "问题归类、主象提示、简版建议和边界提醒。", features: ["简版报告", "基础术数选择", "可复制摘要"] },
-  { id: "single", name: "单次完整报告", price: 1990, unit: "每次", credits: 1, badge: "主推", desc: "适合一个明确问题，解锁完整报告结构。", features: ["完整正文", "术语解释", "行动建议", "TXT 导出"] },
-  { id: "monthly", name: "月度会员", price: 9900, unit: "30 天", credits: 20, badge: "复购", desc: "适合持续测算、保存报告和多主题比较。", features: ["20 次完整报告", "历史记录", "优先生成", "会员标识"] },
-  { id: "yearly", name: "年度会员", price: 39900, unit: "365 天", credits: 120, badge: "高价值", desc: "适合长期使用，后续可接年度流年和专题权益。", features: ["120 次完整报告", "年度规划", "专题折扣", "数据存档"] },
+  { id: "single", name: "标准/深度体验包", price: 1990, unit: "3 次", credits: 3, badge: "主推", desc: "适合一个明确问题，可生成 3 次标准报告或 1 次深度报告。", features: ["3 次标准报告", "或 1 次深度报告", "术语解释", "TXT 导出"] },
+  { id: "monthly", name: "月度会员", price: 9900, unit: "30 天", credits: 30, badge: "复购", desc: "适合持续测算、保存报告和多主题比较。", features: ["30 次完整报告", "历史记录", "优先生成", "会员标识"] },
+  { id: "yearly", name: "年度会员", price: 39900, unit: "365 天", credits: 420, badge: "高价值", desc: "适合长期使用，后续可接年度流年和专题权益。", features: ["420 次完整报告", "年度规划", "专题折扣", "数据存档"] },
   { id: "review", name: "人工复核预约", price: 29900, unit: "每次", credits: 0, badge: "服务层", desc: "后续接入人工服务，不做恐吓式消灾收费。", features: ["人工校对", "补充追问", "报告修订", "预约制"] },
 ];
 
