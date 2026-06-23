@@ -26,6 +26,16 @@ const PLANS = {
   review: { name: "人工复核", amount: 29900, credits: 1, type: "service" },
 };
 
+const REPORT_TIERS = {
+  free: { name: "免费简版", maxTokens: 1400, guidance: "免费简版只输出关键结论、核心依据、3-4条建议；保留悬念但不制造焦虑；不要暗示付费才能避灾。" },
+  standard: { name: "标准报告", maxTokens: 2600, guidance: "标准报告输出完整结构：依据、推演、倾向、建议、边界；术语和白话都要兼顾。" },
+  deep: { name: "深度报告", maxTokens: 3600, guidance: "深度报告增加假设限制、阶段拆解、术语解释、行动清单和复盘问题；仍不得恐吓或保证结果。" },
+};
+
+function normalizeReportTier(value) {
+  return REPORT_TIERS[value] ? value : "free";
+}
+
 const AI_REPORT_INSTRUCTIONS = `
 你是“天机观象”的中国传统术数报告生成器。你要按 chinese-metaphysics-advisor 的原则输出：中文优先、术语准确、白话能懂、结论审慎、现实可执行。
 定位：传统文化、象征系统、人生反思、娱乐参考、规划建议。不得制造迷信权威，不得恐吓，不得保证发财、复合、升职、治病。
@@ -59,6 +69,8 @@ function mergeAiReport(baseReport, aiReport) {
     suggestions: safeArray(aiReport.suggestions, baseReport.suggestions),
     stageAdvice: safeArray(aiReport.stageAdvice, baseReport.stageAdvice),
     termGlossary: safeArray(aiReport.termGlossary, baseReport.termGlossary),
+    reportTier: baseReport.reportTier,
+    reportTierName: baseReport.reportTierName,
     generatedBy: "deepseek",
   };
   if (aiReport.oracle && typeof aiReport.oracle === "object") {
@@ -70,8 +82,12 @@ function mergeAiReport(baseReport, aiReport) {
 async function generateAiReport(baseReport, values, method) {
   if (!process.env.DEEPSEEK_API_KEY) return baseReport;
   const model = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
+  const reportTier = normalizeReportTier(values.reportTier);
+  const tier = REPORT_TIERS[reportTier];
   const input = {
     method,
+    reportTier,
+    tierGuidance: tier.guidance,
     values: {
       question: values.question,
       concernType: values.concernType,
@@ -92,6 +108,7 @@ async function generateAiReport(baseReport, values, method) {
       options: values.options,
       nameBase: values.nameBase,
       style: values.style,
+      reportTier: values.reportTier,
     },
     baseReport,
   };
@@ -105,11 +122,11 @@ async function generateAiReport(baseReport, values, method) {
       model,
       messages: [
         { role: "system", content: AI_REPORT_INSTRUCTIONS },
-        { role: "user", content: `请基于以下输入生成更具体的商业级中文术数参考报告。只返回 JSON。\n${JSON.stringify(input)}` },
+        { role: "user", content: `请基于以下输入生成${tier.name}。档位要求：${tier.guidance}。只返回 JSON，不要 Markdown。\n${JSON.stringify(input)}` },
       ],
       temperature: 0.75,
       response_format: { type: "json_object" },
-      max_tokens: 2600,
+      max_tokens: tier.maxTokens,
     }),
   });
   if (!response.ok) throw new Error(`DeepSeek request failed: ${response.status}`);
@@ -212,6 +229,7 @@ function sanitizeValues(values = {}) {
     nameBase: String(values.nameBase || "").slice(0, 120),
     style: String(values.style || "").slice(0, 200),
     contact: String(values.contact || "").slice(0, 120),
+    reportTier: normalizeReportTier(values.reportTier),
     privacyAccepted: Boolean(values.privacyAccepted),
   };
 }
@@ -273,6 +291,7 @@ async function createReport(req, res) {
   const errors = validateIntake(values);
   if (Object.keys(errors).length) return sendJson(res, 422, { ok: false, errors });
   let report = buildReport(values, method);
+  report = { ...report, reportTier: values.reportTier, reportTierName: REPORT_TIERS[values.reportTier].name };
   try {
     report = await generateAiReport(report, values, method);
   } catch (error) {
