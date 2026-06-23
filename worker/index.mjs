@@ -7,7 +7,7 @@ const jsonHeaders = {
   "access-control-allow-headers": "content-type, authorization",
 };
 
-const API_VERSION = "deepseek-json-v2";
+const API_VERSION = "deepseek-json-v3";
 
 const PLANS = {
   free: { name: "免费试测", amount: 0, credits: 1, type: "free" },
@@ -18,9 +18,9 @@ const PLANS = {
 };
 
 const REPORT_TIERS = {
-  free: { name: "免费简版", maxTokens: 1400, creditCost: 0, guidance: "免费简版只输出关键结论、核心依据、3-4条建议；保留悬念但不制造焦虑；不要暗示付费才能避灾。" },
-  standard: { name: "标准报告", maxTokens: 2600, creditCost: 1, guidance: "标准报告输出完整结构：依据、推演、倾向、建议、边界；术语和白话都要兼顾。" },
-  deep: { name: "深度报告", maxTokens: 3600, creditCost: 3, guidance: "深度报告增加假设限制、阶段拆解、术语解释、行动清单和复盘问题；仍不得恐吓或保证结果。" },
+  free: { name: "免费简版", maxTokens: 2400, creditCost: 0, guidance: "免费简版只输出关键结论、核心依据、3-4条建议；保留悬念但不制造焦虑；不要暗示付费才能避灾。" },
+  standard: { name: "标准报告", maxTokens: 3400, creditCost: 1, guidance: "标准报告输出完整结构：依据、推演、倾向、建议、边界；术语和白话都要兼顾。" },
+  deep: { name: "深度报告", maxTokens: 4600, creditCost: 3, guidance: "深度报告增加假设限制、阶段拆解、术语解释、行动清单和复盘问题；仍不得恐吓或保证结果。" },
 };
 
 function normalizeReportTier(value) {
@@ -51,6 +51,20 @@ function stripCodeFence(text) {
 
 function extractResponseText(payload) {
   return payload?.choices?.[0]?.message?.content || "";
+}
+
+function parseAiJson(text) {
+  const raw = stripCodeFence(text);
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    const start = raw.indexOf("{");
+    const end = raw.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      return JSON.parse(raw.slice(start, end + 1));
+    }
+    throw error;
+  }
 }
 
 function safeArray(value, fallback = []) {
@@ -135,7 +149,7 @@ async function generateAiReport(baseReport, values, method, env) {
   }
   const payload = await response.json();
   const text = stripCodeFence(extractResponseText(payload));
-  const parsed = JSON.parse(text);
+  const parsed = parseAiJson(text);
   return mergeAiReport(baseReport, parsed);
 }
 function sendJson(payload, status = 200) {
