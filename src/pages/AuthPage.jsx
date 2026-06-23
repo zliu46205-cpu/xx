@@ -17,7 +17,7 @@ export function AuthPage({ type, setRoute, onAuth }) {
     event.preventDefault();
     setNotice("");
     if (!values.account || !values.password) {
-      setNotice("请填写账号与密码。大众用户可以用邮箱或手机号注册，管理员需要后台密钥配置后才能进入。");
+      setNotice("请填写账号与密码。大众用户请使用邮箱注册或登录，管理员需要后台密钥配置后才能进入。");
       return;
     }
     if (isAdmin && !values.code) {
@@ -68,8 +68,8 @@ export function AuthPage({ type, setRoute, onAuth }) {
             </label>
           ) : null}
           <label>
-            {isAdmin ? "管理员账号" : "手机号 / 邮箱"}
-            <input value={values.account} onChange={(event) => update("account", event.target.value)} placeholder={isAdmin ? "由后台环境变量配置" : "用于登录和找回报告"} />
+            {isAdmin ? "管理员账号" : "邮箱"}
+            <input value={values.account} onChange={(event) => update("account", event.target.value)} placeholder={isAdmin ? "由后台环境变量配置" : "例如：user@example.com"} />
           </label>
           <label>
             密码
@@ -91,3 +91,4 @@ export function AuthPage({ type, setRoute, onAuth }) {
     </section>
   );
 }
+
