@@ -466,6 +466,27 @@ async function reviewAdminReport(req, res, reportId) {
   await saveList(files.reports, reports);
   sendJson(res, 200, { ok: true, report: reportRow(row), message: "报告审核状态已更新。" });
 }
+
+async function notifyPayment(req, res) {
+  const body = await readJson(req);
+  const configuredSecret = String(process.env.PAYMENT_WEBHOOK_SECRET || "");
+  const providedSecret = req.headers["x-payment-secret"] || String(body.secret || "");
+  if (!configuredSecret || configuredSecret.length < 16) return sendJson(res, 503, { ok: false, code: "PAYMENT_WEBHOOK_NOT_CONFIGURED", message: "请先配置 PAYMENT_WEBHOOK_SECRET，用于支付回调验签。" });
+  if (providedSecret !== configuredSecret) return sendJson(res, 401, { ok: false, code: "INVALID_PAYMENT_SECRET", message: "支付通知签名不正确。" });
+  const orderId = String(body.orderId || body.order_id || "").trim();
+  if (!orderId) return sendJson(res, 422, { ok: false, message: "缺少订单号。" });
+  const orders = await readList(files.orders);
+  const order = orders.find((item) => item.id === orderId);
+  if (!order) return sendJson(res, 404, { ok: false, message: "订单不存在。" });
+  if (order.status === "paid") return sendJson(res, 200, { ok: true, idempotent: true, order: orderRow(order), message: "订单已支付，重复通知已忽略。" });
+  order.status = "paid";
+  order.updatedAt = new Date().toISOString();
+  order.paidAt = order.updatedAt;
+  order.provider = String(body.provider || "webhook").slice(0, 40);
+  await saveList(files.orders, orders);
+  await applyPlanBenefits(order);
+  sendJson(res, 200, { ok: true, idempotent: false, order: orderRow(order), message: "支付通知已确认，权益已发放。" });
+}
 async function adminOverview(req, res) {
   const session = requireSession(req, res);
   if (!session || session.role !== "admin") return sendJson(res, 403, { ok: false, message: "需要管理员权限。" });
@@ -497,6 +518,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && reportMatch) return reportDetail(req, res, reportMatch[1]);
     if (req.method === "POST" && url.pathname === "/api/reports") return createReport(req, res);
     if (req.method === "POST" && url.pathname === "/api/orders") return createOrder(req, res);
+    if (req.method === "POST" && url.pathname === "/api/payments/notify") return notifyPayment(req, res);
     const match = url.pathname.match(/^\/api\/orders\/([^/]+)\/mock-pay$/);
     if (req.method === "POST" && match) return mockPay(req, res, match[1]);
     if (req.method === "GET" && url.pathname === "/api/admin/overview") return adminOverview(req, res);

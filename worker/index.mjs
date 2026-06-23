@@ -577,6 +577,32 @@ async function reviewAdminReport(request, env, reportId) {
   await env.DB.prepare(`UPDATE reports SET report_json = ? WHERE id = ?`).bind(JSON.stringify(report), reportId).run();
   return sendJson({ ok: true, report: formatReportRecord({ ...row, report_json: JSON.stringify(report) }), message: "报告审核状态已更新。" });
 }
+
+async function notifyPayment(request, env) {
+  const missingDb = assertDb(env);
+  if (missingDb) return missingDb;
+  const body = await readJson(request);
+  const configuredSecret = String(env.PAYMENT_WEBHOOK_SECRET || "");
+  const providedSecret = request.headers.get("x-payment-secret") || String(body.secret || "");
+  if (!configuredSecret || configuredSecret.length < 16) {
+    return sendJson({ ok: false, code: "PAYMENT_WEBHOOK_NOT_CONFIGURED", message: "请先配置 PAYMENT_WEBHOOK_SECRET，用于支付回调验签。" }, 503);
+  }
+  if (providedSecret !== configuredSecret) {
+    return sendJson({ ok: false, code: "INVALID_PAYMENT_SECRET", message: "支付通知签名不正确。" }, 401);
+  }
+  const orderId = String(body.orderId || body.order_id || "").trim();
+  if (!orderId) return sendJson({ ok: false, message: "缺少订单号。" }, 422);
+  const order = await env.DB.prepare(`SELECT * FROM orders WHERE id = ?`).bind(orderId).first();
+  if (!order) return sendJson({ ok: false, message: "订单不存在。" }, 404);
+  if (order.status === "paid") {
+    return sendJson({ ok: true, idempotent: true, order: formatOrderRecord(order), message: "订单已支付，重复通知已忽略。" });
+  }
+  const provider = String(body.provider || "webhook").slice(0, 40);
+  const now = new Date().toISOString();
+  await env.DB.prepare(`UPDATE orders SET status = 'paid', updated_at = ?, paid_at = ?, provider = ? WHERE id = ?`).bind(now, now, provider, orderId).run();
+  await applyPlanBenefits(env, { ...order, provider, status: "paid" }, now);
+  return sendJson({ ok: true, idempotent: false, order: { ...formatOrderRecord({ ...order, status: "paid", provider }), status: "paid" }, message: "支付通知已确认，权益已发放。" });
+}
 async function getAdminOverview(request, env) {
   const missingDb = assertDb(env);
   if (missingDb) return missingDb;
@@ -628,6 +654,7 @@ async function handleApi(request, env) {
   if (request.method === "GET" && reportDetailMatch) return getReportDetail(request, env, reportDetailMatch[1]);
   if (request.method === "POST" && url.pathname === "/api/reports") return createReport(request, env);
   if (request.method === "POST" && url.pathname === "/api/orders") return createOrder(request, env);
+  if (request.method === "POST" && url.pathname === "/api/payments/notify") return notifyPayment(request, env);
   const mockPayMatch = url.pathname.match(/^\/api\/orders\/([^/]+)\/mock-pay$/);
   if (request.method === "POST" && mockPayMatch) return markMockPaid(request, env, mockPayMatch[1]);
   if (request.method === "GET" && url.pathname === "/api/admin/overview") return getAdminOverview(request, env);
