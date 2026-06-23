@@ -81,6 +81,10 @@ export async function markMockPaid(orderId, session) {
   });
 }
 
-export async function getAdminOverview(session) {
-  return request("/api/admin/overview", { headers: authHeaders(session) });
+export async function getAdminOverview(session, filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.status && filters.status !== "all") params.set("status", filters.status);
+  if (filters.q) params.set("q", filters.q);
+  const query = params.toString();
+  return request(`/api/admin/overview${query ? `?${query}` : ""}`, { headers: authHeaders(session) });
 }

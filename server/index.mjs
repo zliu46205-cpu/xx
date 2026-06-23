@@ -258,6 +258,10 @@ function reportRow(row) {
   return { id: row.id, createdAt: row.createdAt, methodName: row.methodName, question: row.question, title: row.report?.title, summary: row.report?.summary };
 }
 
+function userRow(row) {
+  return { id: row.id, createdAt: row.createdAt, email: row.email, name: row.name, role: row.role, status: row.status, credits: row.credits || 0 };
+}
+
 function orderRow(row) {
   return { id: row.id, createdAt: row.createdAt, planId: row.planId, planName: row.planName, amount: row.amount, amountText: `¥${cents(row.amount)}`, status: row.status };
 }
@@ -414,14 +418,20 @@ async function mockPay(req, res, orderId) {
 async function adminOverview(req, res) {
   const session = requireSession(req, res);
   if (!session || session.role !== "admin") return sendJson(res, 403, { ok: false, message: "需要管理员权限。" });
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const status = String(url.searchParams.get("status") || "all");
+  const q = String(url.searchParams.get("q") || "").trim().toLowerCase();
   const users = await readList(files.users);
   const reports = await readList(files.reports);
   const orders = await readList(files.orders);
   const paid = orders.filter((item) => item.status === "paid");
   const revenue = paid.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  sendJson(res, 200, { ok: true, metrics: { users: users.length, reports: reports.length, orders: orders.length, paidOrders: paid.length, revenue, revenueText: `¥${cents(revenue)}` }, orders: orders.slice(0, 12).map(orderRow), reports: reports.slice(0, 12).map(reportRow) });
+  const filterText = (item) => JSON.stringify(item).toLowerCase().includes(q);
+  const filteredOrders = orders.filter((item) => (status === "all" || item.status === status) && (!q || filterText(item)));
+  const filteredUsers = users.filter((item) => !q || filterText(item));
+  const filteredReports = reports.filter((item) => !q || filterText(item));
+  sendJson(res, 200, { ok: true, filters: { status, q }, metrics: { users: users.length, reports: reports.length, orders: orders.length, paidOrders: paid.length, revenue, revenueText: `¥${cents(revenue)}` }, users: filteredUsers.slice(0, 20).map(userRow), orders: filteredOrders.slice(0, 20).map(orderRow), reports: filteredReports.slice(0, 20).map(reportRow) });
 }
-
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);

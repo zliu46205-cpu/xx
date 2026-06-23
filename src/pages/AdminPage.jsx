@@ -6,13 +6,30 @@ import { getAdminOverview } from "../utils/api";
 export function AdminPage({ session, setRoute }) {
   const [overview, setOverview] = useState(null);
   const [notice, setNotice] = useState("");
+  const [filters, setFilters] = useState({ status: "all", q: "" });
+  const [status, setStatus] = useState("idle");
+
+  async function loadOverview(nextFilters = filters) {
+    if (!session || session.role !== "admin") return;
+    setStatus("loading");
+    try {
+      const payload = await getAdminOverview(session, nextFilters);
+      setOverview(payload);
+      setNotice("后台数据已刷新。");
+    } catch (error) {
+      setNotice(error.message || "管理员后台加载失败。请确认 Cloudflare 环境变量已配置。");
+    } finally {
+      setStatus("idle");
+    }
+  }
 
   useEffect(() => {
-    if (!session || session.role !== "admin") return;
-    getAdminOverview(session)
-      .then((payload) => setOverview(payload))
-      .catch((error) => setNotice(error.message || "管理员后台加载失败。请确认 Cloudflare 环境变量已配置。"));
+    loadOverview(filters);
   }, [session]);
+
+  function updateFilter(key, value) {
+    setFilters((current) => ({ ...current, [key]: value }));
+  }
 
   if (!session || session.role !== "admin") {
     return (
@@ -39,18 +56,47 @@ export function AdminPage({ session, setRoute }) {
         <article><span>已支付订单</span><strong>{metrics.paidOrders}</strong></article>
         <article><span>模拟收入</span><strong>{metrics.revenueText || `¥${(metrics.revenue / 100).toFixed(2)}`}</strong></article>
       </section>
-      <section className="admin-layout">
+
+      <section className="admin-filter-bar">
+        <label>
+          订单状态
+          <select value={filters.status} onChange={(event) => updateFilter("status", event.target.value)}>
+            <option value="all">全部订单</option>
+            <option value="pending">待支付</option>
+            <option value="paid">已支付</option>
+          </select>
+        </label>
+        <label>
+          搜索
+          <input value={filters.q} onChange={(event) => updateFilter("q", event.target.value)} placeholder="邮箱、订单号、问题关键词" />
+        </label>
+        <div className="form-actions">
+          <Button type="button" onClick={() => loadOverview(filters)} disabled={status === "loading"}>{status === "loading" ? "刷新中..." : "应用筛选"}</Button>
+          <Button type="button" variant="ghost" onClick={() => { const next = { status: "all", q: "" }; setFilters(next); loadOverview(next); }}>清空</Button>
+        </div>
+      </section>
+
+      <section className="admin-layout admin-layout-wide">
+        <div className="account-panel">
+          <div className="section-title compact"><span>用户列表</span><h2>最近用户</h2></div>
+          {overview?.users?.length ? overview.users.map((item) => (
+            <article className="record-row admin-record" key={item.id}>
+              <div><strong>{item.name || "用户"}</strong><p>{item.email} · {item.status} · 剩余 {item.credits} 次</p></div>
+              <small>{item.createdAt || item.created_at}</small>
+            </article>
+          )) : <Notice>暂无匹配用户。</Notice>}
+        </div>
         <div className="account-panel">
           <div className="section-title compact"><span>最近订单</span><h2>订单管理</h2></div>
           {overview?.orders?.length ? overview.orders.map((item) => (
-            <article className="record-row" key={item.id}><div><strong>{item.planName || item.plan_name}</strong><p>{item.status}</p></div><small>{item.amountText || `¥${(item.amount / 100).toFixed(2)}`}</small></article>
-          )) : <Notice>暂无订单。</Notice>}
+            <article className="record-row admin-record" key={item.id}><div><strong>{item.planName || item.plan_name}</strong><p>{item.status} · {item.id}</p></div><small>{item.amountText || `¥${(item.amount / 100).toFixed(2)}`}</small></article>
+          )) : <Notice>暂无匹配订单。</Notice>}
         </div>
         <div className="account-panel">
           <div className="section-title compact"><span>最近报告</span><h2>报告审核</h2></div>
           {overview?.reports?.length ? overview.reports.map((item) => (
-            <article className="record-row" key={item.id}><div><strong>{item.methodName || item.method_name}</strong><p>{item.question}</p></div><small>{item.createdAt || item.created_at}</small></article>
-          )) : <Notice>暂无报告。</Notice>}
+            <article className="record-row admin-record" key={item.id}><div><strong>{item.methodName || item.method_name}</strong><p>{item.question}</p></div><small>{item.createdAt || item.created_at}</small></article>
+          )) : <Notice>暂无匹配报告。</Notice>}
         </div>
       </section>
       <Notice>{notice}</Notice>

@@ -387,6 +387,10 @@ function formatOrderRecord(item) {
   return { id: item.id, createdAt: item.created_at, planId: item.plan_id, planName: item.plan_name, amount: item.amount, amountText: `¥${centsToYuan(item.amount)}`, status: item.status };
 }
 
+function formatUserRecord(item) {
+  return { id: item.id, createdAt: item.created_at, email: item.email, name: item.name, role: item.role, status: item.status, credits: item.credits || 0 };
+}
+
 async function createReport(request, env) {
   const missingDb = assertDb(env);
   if (missingDb) return missingDb;
@@ -460,7 +464,7 @@ async function getReportDetail(request, env, reportId) {
   const row = auth.session.role === "admin"
     ? await env.DB.prepare(`SELECT id, created_at, method_name, question, report_json FROM reports WHERE id = ?`).bind(reportId).first()
     : await env.DB.prepare(`SELECT id, created_at, method_name, question, report_json FROM reports WHERE id = ? AND user_id = ?`).bind(reportId, auth.session.userId).first();
-  if (!row) return sendJson({ ok: false, message: "???????????" }, 404);
+  if (!row) return sendJson({ ok: false, message: "报告不存在或无权查看。" }, 404);
   let report = {};
   try { report = JSON.parse(row.report_json || "{}"); } catch {}
   return sendJson({ ok: true, report: { ...report, id: report.id || row.id, createdAt: report.createdAt || row.created_at }, record: formatReportRecord(row) });
@@ -516,17 +520,27 @@ async function getAdminOverview(request, env) {
   if (missingDb) return missingDb;
   const auth = await requireAdmin(request, env);
   if (auth.response) return auth.response;
+  const url = new URL(request.url);
+  const status = String(url.searchParams.get("status") || "all");
+  const q = String(url.searchParams.get("q") || "").trim().toLowerCase();
   const users = await env.DB.prepare(`SELECT COUNT(*) AS count FROM users`).first().catch(() => ({ count: 0 }));
   const reports = await env.DB.prepare(`SELECT COUNT(*) AS count FROM reports`).first().catch(() => ({ count: 0 }));
   const orders = await env.DB.prepare(`SELECT COUNT(*) AS count FROM orders`).first().catch(() => ({ count: 0 }));
   const paid = await env.DB.prepare(`SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS revenue FROM orders WHERE status = 'paid'`).first().catch(() => ({ count: 0, revenue: 0 }));
-  const recentOrders = await env.DB.prepare(`SELECT * FROM orders ORDER BY created_at DESC LIMIT 12`).all().catch(() => ({ results: [] }));
-  const recentReports = await env.DB.prepare(`SELECT id, created_at, method_name, question, report_json FROM reports ORDER BY created_at DESC LIMIT 12`).all().catch(() => ({ results: [] }));
+  const recentUsers = await env.DB.prepare(`SELECT id, created_at, email, name, role, status, credits FROM users ORDER BY created_at DESC LIMIT 40`).all().catch(() => ({ results: [] }));
+  const recentOrders = await env.DB.prepare(`SELECT * FROM orders ORDER BY created_at DESC LIMIT 40`).all().catch(() => ({ results: [] }));
+  const recentReports = await env.DB.prepare(`SELECT id, created_at, method_name, question, report_json FROM reports ORDER BY created_at DESC LIMIT 40`).all().catch(() => ({ results: [] }));
+  const filterText = (item) => JSON.stringify(item).toLowerCase().includes(q);
+  const filteredOrders = (recentOrders.results || []).filter((item) => (status === "all" || item.status === status) && (!q || filterText(item)));
+  const filteredUsers = (recentUsers.results || []).filter((item) => !q || filterText(item));
+  const filteredReports = (recentReports.results || []).filter((item) => !q || filterText(item));
   return sendJson({
     ok: true,
+    filters: { status, q },
     metrics: { users: users.count || 0, reports: reports.count || 0, orders: orders.count || 0, paidOrders: paid.count || 0, revenue: paid.revenue || 0, revenueText: `¥${centsToYuan(paid.revenue || 0)}` },
-    orders: (recentOrders.results || []).map(formatOrderRecord),
-    reports: (recentReports.results || []).map(formatReportRecord),
+    users: filteredUsers.slice(0, 20).map(formatUserRecord),
+    orders: filteredOrders.slice(0, 20).map(formatOrderRecord),
+    reports: filteredReports.slice(0, 20).map(formatReportRecord),
   });
 }
 

@@ -1687,6 +1687,37 @@ input:focus, textarea:focus, select:focus {
 .admin-metrics {
   grid-template-columns: repeat(5, 1fr);
 }
+.admin-filter-bar {
+  width: min(1220px, calc(100% - 32px));
+  margin: 0 auto 22px;
+  display: grid;
+  grid-template-columns: 180px minmax(260px, 1fr) auto;
+  gap: 14px;
+  align-items: end;
+  padding: 18px;
+  border: 1px solid var(--line);
+  background: rgba(18, 13, 8, 0.78);
+}
+.admin-filter-bar label {
+  display: grid;
+  gap: 8px;
+  color: var(--gold);
+  font-weight: 900;
+}
+.admin-filter-bar input,
+.admin-filter-bar select {
+  min-height: 42px;
+  border: 1px solid rgba(212, 175, 55, 0.28);
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--text);
+  padding: 0 12px;
+}
+.admin-layout-wide {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.admin-record p {
+  word-break: break-word;
+}
 .admin-metrics article {
   min-height: 140px;
 }
@@ -1714,7 +1745,8 @@ input:focus, textarea:focus, select:focus {
   .account-layout,
   .admin-layout,
   .checkout-panel,
-  .billing-status-strip {
+  .billing-status-strip,
+  .admin-filter-bar {
     grid-template-columns: 1fr;
   }
   .checkout-panel {
