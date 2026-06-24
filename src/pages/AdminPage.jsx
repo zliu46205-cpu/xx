@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Notice } from "../components/Primitives";
 import { PageHeader } from "../components/Layout";
 import { getAdminOverview, markAdminOrderPaid, reviewAdminReport, updateAdminUser } from "../utils/api";
@@ -95,7 +95,9 @@ export function AdminPage({ session, setRoute }) {
     );
   }
 
-  const metrics = overview?.metrics || { users: 0, reports: 0, orders: 0, paidOrders: 0, revenue: 0, revenueText: "¥0.00" };
+  const metrics = overview?.metrics || { users: 0, reports: 0, orders: 0, paidOrders: 0, pendingOrders: 0, todayUsers: 0, todayOrders: 0, activeMembers: 0, revenue: 0, revenueText: "¥0.00", todayAmountText: "¥0.00" };
+  const trends = overview?.trends || { users: [], orders: [], revenue: [] };
+  const maxTrendValue = Math.max(1, ...Object.values(trends).flat().map((item) => Number(item.value || 0)));
 
   return (
     <>
@@ -106,6 +108,11 @@ export function AdminPage({ session, setRoute }) {
         <article><span>订单数</span><strong>{metrics.orders}</strong></article>
         <article><span>已支付订单</span><strong>{metrics.paidOrders}</strong></article>
         <article><span>模拟收入</span><strong>{metrics.revenueText || `¥${(metrics.revenue / 100).toFixed(2)}`}</strong></article>
+        <article><span>待支付</span><strong>{metrics.pendingOrders}</strong></article>
+        <article><span>今日用户</span><strong>{metrics.todayUsers}</strong></article>
+        <article><span>今日订单</span><strong>{metrics.todayOrders}</strong></article>
+        <article><span>活跃会员</span><strong>{metrics.activeMembers}</strong></article>
+        <article><span>今日流水</span><strong>{metrics.todayAmountText}</strong></article>
       </section>
 
       <section className="admin-filter-bar">
@@ -127,6 +134,31 @@ export function AdminPage({ session, setRoute }) {
         </div>
       </section>
 
+      <section className="admin-ops-grid">
+        <article className="admin-trend-card">
+          <span>近 7 日趋势</span>
+          <h2>用户、订单、收入</h2>
+          <div className="trend-bars">
+            {["users", "orders", "revenue"].map((key) => (
+              <div key={key}>
+                <strong>{key === "users" ? "新增用户" : key === "orders" ? "订单数" : "收入"}</strong>
+                <div>{(trends[key] || []).map((item) => <i key={`${key}-${item.day}`} title={`${item.day}: ${item.value}`} style={{ height: `${Math.max(8, (Number(item.value || 0) / maxTrendValue) * 100)}%` }} />)}</div>
+              </div>
+            ))}
+          </div>
+        </article>
+        <article className="admin-audit-card">
+          <span>操作审计</span>
+          <h2>最近后台与支付动作</h2>
+          {overview?.auditLogs?.length ? overview.auditLogs.slice(0, 8).map((item) => (
+            <div className="audit-row" key={item.id}>
+              <strong>{item.action}</strong>
+              <small>{item.actorId} · {item.targetType}:{item.targetId}</small>
+              <em>{item.createdAt}</em>
+            </div>
+          )) : <Notice>暂无审计记录。执行确认订单、报告审核或支付回调后会出现记录。</Notice>}
+        </article>
+      </section>
       <section className="admin-layout admin-layout-wide">
         <div className="account-panel">
           <div className="section-title compact"><span>用户列表</span><h2>权益与状态</h2></div>

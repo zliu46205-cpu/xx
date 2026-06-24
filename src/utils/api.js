@@ -10,7 +10,7 @@ async function request(path, options = {}) {
   });
   const payload = await response.json();
   if (!response.ok || payload.ok === false) {
-    const error = new Error(payload.message || "璇锋眰澶辫触");
+    const error = new Error(payload.message || "鐠囬攱鐪版径杈Е");
     error.payload = payload;
     throw error;
   }
@@ -66,11 +66,11 @@ export async function getReportDetail(reportId, session) {
   return request(`/api/reports/${encodeURIComponent(reportId)}`, { headers: authHeaders(session) });
 }
 
-export async function createOrder(planId, session) {
+export async function createOrder(planId, session, provider = "manual") {
   return request("/api/orders", {
     method: "POST",
     headers: authHeaders(session),
-    body: JSON.stringify({ planId }),
+    body: JSON.stringify({ planId, provider }),
   });
 }
 

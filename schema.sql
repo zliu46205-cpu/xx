@@ -1,4 +1,4 @@
-﻿CREATE TABLE IF NOT EXISTS users (
+CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   created_at TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
@@ -54,3 +54,16 @@ CREATE INDEX IF NOT EXISTS idx_memberships_user_status ON memberships(user_id, s
 -- Existing D1 database upgrade note:
 -- If your reports table was created before user login support, run this once in Cloudflare D1 Console:
 -- ALTER TABLE reports ADD COLUMN user_id TEXT;
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL,
+  actor_id TEXT,
+  action TEXT NOT NULL,
+  target_type TEXT,
+  target_id TEXT,
+  detail_json TEXT DEFAULT '{}'
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_actor ON audit_logs(actor_id, created_at DESC);

@@ -1,4 +1,4 @@
-﻿import { buildReport, validateIntake } from "../src/utils/report.js";
+import { buildReport, validateIntake } from "../src/utils/report.js";
 
 const jsonHeaders = {
   "content-type": "application/json; charset=utf-8",
@@ -7,7 +7,9 @@ const jsonHeaders = {
   "access-control-allow-headers": "content-type, authorization",
 };
 
-const API_VERSION = "deepseek-json-v3";
+const API_VERSION = "deepseek-json-v4";
+
+const PAYMENT_PROVIDERS = new Set(["manual", "generic_hmac", "wechat", "alipay", "stripe"]);
 
 const PLANS = {
   free: { name: "免费试测", amount: 0, credits: 1, type: "free" },
@@ -27,6 +29,29 @@ function normalizeReportTier(value) {
   return REPORT_TIERS[value] ? value : "free";
 }
 
+const METHOD_DETAIL_GUIDES = {
+  bazi: "八字报告必须围绕日主、月令、十神、财官印食、调候、大运流年展开。事业问重点看官杀印星与食伤输出；姻缘问重点看夫妻星、关系节奏与现实边界；财运问重点看财星承载与风险。不得只写泛泛性格。",
+  ziwei: "紫微报告必须围绕命宫、身宫、十二宫、三方四正、四化展开。要说明所问事项落在哪些宫位，哪一宫代表本人、哪一宫代表对象或事业资源。不得只列星名。",
+  meihua: "梅花报告必须围绕本卦、互卦、变卦、体用、生克、动爻、外应展开。要说明当前、内里、后续三层，不得只写吉凶。",
+  liuyao: "六爻报告必须围绕用神、世应、六亲、六神、动变、伏神、应期倾向展开。必须先定用神，再解释世应关系。未输入正式卦象时要说明为简化模拟。",
+  coins: "铜钱占卜报告必须围绕三钱六掷、本卦、变卦、动爻、卦辞、象辞展开。要把卦意翻译成选择建议和观察点，不得只解释卦名。",
+  qimen: "奇门报告必须围绕九宫、八门、九星、八神、值符值使、用神落宫展开。适合策略、方向、时机、谈判，必须给出可执行路径。",
+  fengshui: "风水报告必须围绕明堂、气口、动线、坐向、采光、形煞、功能区展开。优先给空间调整，不推销物品，不恐吓。",
+  naming: "起名报告必须围绕五行意象、音形义、字形、谐音、避讳、传播场景展开。要给候选方向或筛选规则，不承诺改命。",
+  integrated: "综合咨询必须先拆问题类型，再说明更适合八字、紫微、梅花、六爻、奇门、风水或起名中的哪一种。重点是把用户问题整理成可执行步骤。"
+};
+
+function detectQuestionScene(values = {}) {
+  const text = [values.question, values.concernType, values.focusProblem, values.background, values.options].filter(Boolean).join(" ");
+  if (/(工作|事业|跳槽|offer|创业|升职|项目|面试|客户|转行|失业)/.test(text)) return "事业工作";
+  if (/(感情|姻缘|桃花|复合|恋爱|结婚|合婚|对象|分手|喜欢|前任|婚姻|脱单)/.test(text)) return "姻缘关系";
+  if (/(财|钱|收入|生意|订单|副业|借钱|债|亏|盈利|赚钱)/.test(text)) return "财运经营";
+  if (/(学习|考试|考研|证书|上岸|录取|成绩|备考|学校)/.test(text)) return "学业考试";
+  if (/(搬家|装修|户型|房间|办公室|床|桌|门|窗|灶)/.test(text)) return "空间风水";
+  if (/(名字|起名|店名|品牌|公司名|宝宝|账号|改名)/.test(text)) return "命名取象";
+  if (/(什么时候|哪天|择日|开业|签约|出行|发布|上线)/.test(text)) return "择时择日";
+  return "综合处境";
+}
 const AI_REPORT_INSTRUCTIONS = `
 你是“天机观象”的中国传统术数报告生成器。你要按 chinese-metaphysics-advisor 的原则输出：中文优先、术语准确、白话能懂、结论审慎、现实可执行。
 定位：传统文化、象征系统、人生反思、娱乐参考、规划建议。不得制造迷信权威，不得恐吓，不得保证发财、复合、升职、治病。
@@ -43,6 +68,8 @@ const AI_REPORT_INSTRUCTIONS = `
 - termGlossary: 4-6 组数组，如 ["用神", "解释"]。
 根据方法使用对应术语：八字用日主/月令/十神/财官印食/大运流年；紫微用命宫/身宫/十二宫/三方四正/四化；梅花用本互变/体用/动爻/外应；六爻用世应/用神/六亲/六神/动变；奇门用九宫/八门/九星/八神/值符值使；风水用明堂/气口/动线/坐向/采光；起名用五行意象/音形义/避讳。
 如果资料不足，要明确“按简化路径分析”，但仍要给出有区分度的判断。
+禁止套模板：每次必须根据 method.id、questionScene、用户原问题、资料完整度、报告档位生成不同的主象、推演重点和建议，不得输出与其他术数相同的泛化段落。
+白话要给普通用户看得懂，但术语必须出现且解释清楚：先术语取象，再白话翻译，再现实行动。
 `;
 
 function stripCodeFence(text) {
@@ -99,6 +126,8 @@ async function generateAiReport(baseReport, values, method, env) {
   const tier = REPORT_TIERS[reportTier];
   const input = {
     method,
+    methodGuide: METHOD_DETAIL_GUIDES[method.id] || METHOD_DETAIL_GUIDES.integrated,
+    questionScene: detectQuestionScene(values),
     reportTier,
     tierGuidance: tier.guidance,
     values: {
@@ -136,7 +165,7 @@ async function generateAiReport(baseReport, values, method, env) {
       model,
       messages: [
         { role: "system", content: AI_REPORT_INSTRUCTIONS },
-        { role: "user", content: `请基于以下输入生成${tier.name}。档位要求：${tier.guidance}。只返回 JSON，不要 Markdown。\n${JSON.stringify(input)}` },
+        { role: "user", content: `请基于以下输入生成${tier.name}。档位要求：${tier.guidance}。术数专项要求：${input.methodGuide}。问题场景：${input.questionScene}。请明显区分本方法和其他方法，避免套话。只返回 JSON，不要 Markdown。\n${JSON.stringify(input)}` },
       ],
       temperature: 0.75,
       response_format: { type: "json_object" },
@@ -318,6 +347,65 @@ function centsToYuan(amount) {
   return (Number(amount || 0) / 100).toFixed(2);
 }
 
+function normalizePaymentProvider(value) {
+  const provider = String(value || "manual").trim().toLowerCase();
+  return PAYMENT_PROVIDERS.has(provider) ? provider : "manual";
+}
+
+function getClientIp(request) {
+  return request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "";
+}
+
+async function createAuditLog(env, actorId, action, targetType, targetId, detail = {}) {
+  if (!env.DB) return;
+  await env.DB.prepare(
+    `INSERT INTO audit_logs (id, created_at, actor_id, action, target_type, target_id, detail_json) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(makeId("audit"), new Date().toISOString(), actorId || "system", action, targetType || "system", targetId || "", JSON.stringify(detail).slice(0, 2000)).run().catch(() => null);
+}
+
+async function paymentSignature(secret, payload) {
+  if (!secret) return "";
+  return hmac(payload, secret);
+}
+
+async function buildCheckoutUrl(order, provider, env) {
+  if (Number(order.amount || 0) <= 0) return "";
+  const baseUrl = String(env.PAYMENT_CHECKOUT_BASE_URL || "").trim();
+  if (!baseUrl) return "";
+  const secret = String(env.PAYMENT_CHECKOUT_SECRET || env.PAYMENT_WEBHOOK_SECRET || "");
+  const payload = `${order.id}.${order.amount}.${order.user_id}.${provider}`;
+  const sign = await paymentSignature(secret, payload);
+  const url = new URL(baseUrl);
+  url.searchParams.set("orderId", order.id);
+  url.searchParams.set("amount", String(order.amount));
+  url.searchParams.set("provider", provider);
+  url.searchParams.set("plan", order.plan_id);
+  if (sign) url.searchParams.set("sign", sign);
+  return url.toString();
+}
+
+async function verifyPaymentNotice(request, bodyText, body, env) {
+  const provider = normalizePaymentProvider(body.provider || body.channel);
+  const configuredSecret = String(env.PAYMENT_WEBHOOK_SECRET || "");
+  if (!configuredSecret || configuredSecret.length < 16) {
+    return { ok: false, response: sendJson({ ok: false, code: "PAYMENT_WEBHOOK_NOT_CONFIGURED", message: "请先配置 PAYMENT_WEBHOOK_SECRET，用于支付回调验签。" }, 503) };
+  }
+  if (provider === "generic_hmac") {
+    const timestamp = request.headers.get("x-payment-timestamp") || String(body.timestamp || "");
+    const signature = request.headers.get("x-payment-signature") || String(body.signature || "");
+    const expected = await hmac(`${timestamp}.${bodyText}`, configuredSecret);
+    if (!timestamp || !signature || signature !== expected) {
+      return { ok: false, response: sendJson({ ok: false, code: "INVALID_PAYMENT_SIGNATURE", message: "支付通知签名不正确。" }, 401) };
+    }
+    return { ok: true, provider };
+  }
+  const providedSecret = request.headers.get("x-payment-secret") || String(body.secret || "");
+  if (providedSecret !== configuredSecret) {
+    return { ok: false, response: sendJson({ ok: false, code: "INVALID_PAYMENT_SECRET", message: "支付通知密钥不正确。" }, 401) };
+  }
+  return { ok: true, provider };
+}
+
 async function registerUser(request, env) {
   const missingDb = assertDb(env) || assertAuthConfigured(env);
   if (missingDb) return missingDb;
@@ -402,6 +490,7 @@ async function deleteAccountData(request, env) {
   await env.DB.prepare(`DELETE FROM memberships WHERE user_id = ?`).bind(auth.session.userId).run().catch(() => null);
   await env.DB.prepare(`DELETE FROM orders WHERE user_id = ?`).bind(auth.session.userId).run().catch(() => null);
   await env.DB.prepare(`UPDATE users SET email = ?, name = '已注销用户', status = 'disabled', credits = 0 WHERE id = ?`).bind(`deleted-${auth.session.userId}@deleted.local`, auth.session.userId).run();
+  await createAuditLog(env, auth.session.userId, "account.delete", "user", auth.session.userId, { selfService: true });
   return sendJson({ ok: true, message: "账户资料已删除并停用。" });
 }
 async function getAccount(request, env) {
@@ -528,18 +617,23 @@ async function createOrder(request, env) {
   if (auth.response) return auth.response;
   if (auth.session.role !== "user") return sendJson({ ok: false, message: "管理员不创建用户订单。" }, 403);
   const body = await readJson(request);
-  const plan = PLANS[String(body.planId || "")];
+  const planId = String(body.planId || "");
+  const plan = PLANS[planId];
   if (!plan) return sendJson({ ok: false, message: "套餐不存在。" }, 404);
+  const provider = normalizePaymentProvider(body.provider || env.DEFAULT_PAYMENT_PROVIDER || "manual");
   const now = new Date().toISOString();
   const id = makeId("order");
   const status = plan.amount === 0 ? "paid" : "pending";
+  const order = { id, user_id: auth.session.userId, plan_id: planId, amount: plan.amount };
+  const checkoutUrl = await buildCheckoutUrl(order, provider, env);
   await env.DB.prepare(
-    `INSERT INTO orders (id, created_at, updated_at, user_id, plan_id, plan_name, amount, currency, status, provider, checkout_url) VALUES (?, ?, ?, ?, ?, ?, ?, 'CNY', ?, 'manual', '')`,
-  ).bind(id, now, now, auth.session.userId, body.planId, plan.name, plan.amount, status).run();
+    `INSERT INTO orders (id, created_at, updated_at, user_id, plan_id, plan_name, amount, currency, status, provider, checkout_url) VALUES (?, ?, ?, ?, ?, ?, ?, 'CNY', ?, ?, ?)`,
+  ).bind(id, now, now, auth.session.userId, planId, plan.name, plan.amount, status, provider, checkoutUrl).run();
   if (plan.amount === 0) {
     await env.DB.prepare(`UPDATE users SET credits = COALESCE(credits, 0) + ? WHERE id = ?`).bind(plan.credits, auth.session.userId).run().catch(() => null);
   }
-  return sendJson({ ok: true, order: { id, planId: body.planId, planName: plan.name, amount: plan.amount, amountText: `¥${centsToYuan(plan.amount)}`, status, checkoutUrl: "" } }, 201);
+  await createAuditLog(env, auth.session.userId, "order.create", "order", id, { planId, provider, amount: plan.amount, ip: getClientIp(request) });
+  return sendJson({ ok: true, order: { id, planId, planName: plan.name, amount: plan.amount, amountText: `¥${centsToYuan(plan.amount)}`, status, provider, checkoutUrl } }, 201);
 }
 
 
@@ -603,6 +697,7 @@ async function updateAdminUser(request, env, userId) {
   const nextCredits = Math.max(Number(current.credits || 0) + creditsDelta, 0);
   const nextStatus = status || current.status || "active";
   await env.DB.prepare(`UPDATE users SET credits = ?, status = ? WHERE id = ?`).bind(nextCredits, nextStatus, userId).run();
+  await createAuditLog(env, auth.session.email || auth.session.userId, "admin.user.update", "user", userId, { creditsDelta, nextCredits, nextStatus });
   const user = await env.DB.prepare(`SELECT id, created_at, email, name, role, status, credits FROM users WHERE id = ?`).bind(userId).first();
   return sendJson({ ok: true, user: formatUserRecord(user), message: "用户权益已更新。" });
 }
@@ -618,6 +713,7 @@ async function markAdminOrderPaid(request, env, orderId) {
   const now = new Date().toISOString();
   await env.DB.prepare(`UPDATE orders SET status = 'paid', updated_at = ?, paid_at = ? WHERE id = ?`).bind(now, now, orderId).run();
   await applyPlanBenefits(env, order, now);
+  await createAuditLog(env, auth.session.email || auth.session.userId, "admin.order.mark_paid", "order", orderId, { amount: order.amount, planId: order.plan_id });
   return sendJson({ ok: true, order: { ...formatOrderRecord({ ...order, status: "paid" }), status: "paid" }, message: "订单已确认并发放权益。" });
 }
 
@@ -638,33 +734,61 @@ async function reviewAdminReport(request, env, reportId) {
   try { report = JSON.parse(row.report_json || "{}"); } catch {}
   report.adminReview = { status, note, reviewedAt: new Date().toISOString(), reviewer: auth.session.email || "admin" };
   await env.DB.prepare(`UPDATE reports SET report_json = ? WHERE id = ?`).bind(JSON.stringify(report), reportId).run();
+  await createAuditLog(env, auth.session.email || auth.session.userId, "admin.report.review", "report", reportId, { status, note });
   return sendJson({ ok: true, report: formatReportRecord({ ...row, report_json: JSON.stringify(report) }), message: "报告审核状态已更新。" });
 }
 
 async function notifyPayment(request, env) {
   const missingDb = assertDb(env);
   if (missingDb) return missingDb;
-  const body = await readJson(request);
-  const configuredSecret = String(env.PAYMENT_WEBHOOK_SECRET || "");
-  const providedSecret = request.headers.get("x-payment-secret") || String(body.secret || "");
-  if (!configuredSecret || configuredSecret.length < 16) {
-    return sendJson({ ok: false, code: "PAYMENT_WEBHOOK_NOT_CONFIGURED", message: "请先配置 PAYMENT_WEBHOOK_SECRET，用于支付回调验签。" }, 503);
-  }
-  if (providedSecret !== configuredSecret) {
-    return sendJson({ ok: false, code: "INVALID_PAYMENT_SECRET", message: "支付通知签名不正确。" }, 401);
-  }
-  const orderId = String(body.orderId || body.order_id || "").trim();
+  const bodyText = await request.text();
+  let body = {};
+  try { body = bodyText ? JSON.parse(bodyText) : {}; } catch { return sendJson({ ok: false, message: "支付通知 JSON 格式不正确。" }, 422); }
+  const verified = await verifyPaymentNotice(request, bodyText, body, env);
+  if (!verified.ok) return verified.response;
+  const orderId = String(body.orderId || body.order_id || body.outTradeNo || body.out_trade_no || "").trim();
   if (!orderId) return sendJson({ ok: false, message: "缺少订单号。" }, 422);
   const order = await env.DB.prepare(`SELECT * FROM orders WHERE id = ?`).bind(orderId).first();
   if (!order) return sendJson({ ok: false, message: "订单不存在。" }, 404);
   if (order.status === "paid") {
+    await createAuditLog(env, "payment", "payment.duplicate", "order", orderId, { provider: verified.provider });
     return sendJson({ ok: true, idempotent: true, order: formatOrderRecord(order), message: "订单已支付，重复通知已忽略。" });
   }
-  const provider = String(body.provider || "webhook").slice(0, 40);
+  const notifiedAmount = Number(body.amount ?? body.total ?? body.total_fee ?? order.amount);
+  if (Number.isFinite(notifiedAmount) && notifiedAmount > 0 && notifiedAmount !== Number(order.amount || 0)) {
+    await createAuditLog(env, "payment", "payment.amount_mismatch", "order", orderId, { provider: verified.provider, notifiedAmount, expectedAmount: order.amount });
+    return sendJson({ ok: false, code: "PAYMENT_AMOUNT_MISMATCH", message: "支付金额与订单金额不一致，已拒绝入账。" }, 409);
+  }
   const now = new Date().toISOString();
-  await env.DB.prepare(`UPDATE orders SET status = 'paid', updated_at = ?, paid_at = ?, provider = ? WHERE id = ?`).bind(now, now, provider, orderId).run();
-  await applyPlanBenefits(env, { ...order, provider, status: "paid" }, now);
-  return sendJson({ ok: true, idempotent: false, order: { ...formatOrderRecord({ ...order, status: "paid", provider }), status: "paid" }, message: "支付通知已确认，权益已发放。" });
+  await env.DB.prepare(`UPDATE orders SET status = 'paid', updated_at = ?, paid_at = ?, provider = ? WHERE id = ?`).bind(now, now, verified.provider, orderId).run();
+  await applyPlanBenefits(env, { ...order, provider: verified.provider, status: "paid" }, now);
+  await createAuditLog(env, "payment", "payment.paid", "order", orderId, { provider: verified.provider, amount: order.amount, transactionId: body.transactionId || body.transaction_id || body.trade_no || "" });
+  return sendJson({ ok: true, idempotent: false, order: { ...formatOrderRecord({ ...order, status: "paid", provider: verified.provider }), status: "paid" }, message: "支付通知已确认，权益已发放。" });
+}
+async function queryDailyCounts(env, table, column = "created_at") {
+  const result = await env.DB.prepare(`SELECT substr(${column}, 1, 10) AS day, COUNT(*) AS count FROM ${table} WHERE ${column} >= date('now', '-6 days') GROUP BY day ORDER BY day ASC`).all().catch(() => ({ results: [] }));
+  return result.results || [];
+}
+
+async function queryDailyRevenue(env) {
+  const result = await env.DB.prepare(`SELECT substr(paid_at, 1, 10) AS day, COUNT(*) AS count, COALESCE(SUM(amount), 0) AS revenue FROM orders WHERE status = 'paid' AND paid_at >= date('now', '-6 days') GROUP BY day ORDER BY day ASC`).all().catch(() => ({ results: [] }));
+  return result.results || [];
+}
+
+function normalizeTrend(rows, valueKey = "count") {
+  const map = new Map((rows || []).map((item) => [item.day, Number(item[valueKey] || 0)]));
+  const today = new Date();
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(today.getTime() - (6 - index) * 86400000);
+    const day = date.toISOString().slice(0, 10);
+    return { day, value: map.get(day) || 0 };
+  });
+}
+
+function formatAuditRecord(item) {
+  let detail = {};
+  try { detail = JSON.parse(item.detail_json || "{}"); } catch {}
+  return { id: item.id, createdAt: item.created_at, actorId: item.actor_id, action: item.action, targetType: item.target_type, targetId: item.target_id, detail };
 }
 async function getAdminOverview(request, env) {
   const missingDb = assertDb(env);
@@ -674,13 +798,20 @@ async function getAdminOverview(request, env) {
   const url = new URL(request.url);
   const status = String(url.searchParams.get("status") || "all");
   const q = String(url.searchParams.get("q") || "").trim().toLowerCase();
+  const today = new Date().toISOString().slice(0, 10);
   const users = await env.DB.prepare(`SELECT COUNT(*) AS count FROM users`).first().catch(() => ({ count: 0 }));
   const reports = await env.DB.prepare(`SELECT COUNT(*) AS count FROM reports`).first().catch(() => ({ count: 0 }));
   const orders = await env.DB.prepare(`SELECT COUNT(*) AS count FROM orders`).first().catch(() => ({ count: 0 }));
   const paid = await env.DB.prepare(`SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS revenue FROM orders WHERE status = 'paid'`).first().catch(() => ({ count: 0, revenue: 0 }));
+  const pending = await env.DB.prepare(`SELECT COUNT(*) AS count FROM orders WHERE status = 'pending'`).first().catch(() => ({ count: 0 }));
+  const todayOrders = await env.DB.prepare(`SELECT COUNT(*) AS count, COALESCE(SUM(amount), 0) AS amount FROM orders WHERE substr(created_at, 1, 10) = ?`).bind(today).first().catch(() => ({ count: 0, amount: 0 }));
+  const todayUsers = await env.DB.prepare(`SELECT COUNT(*) AS count FROM users WHERE substr(created_at, 1, 10) = ?`).bind(today).first().catch(() => ({ count: 0 }));
+  const activeMembers = await env.DB.prepare(`SELECT COUNT(*) AS count FROM memberships WHERE status = 'active' AND end_at >= ?`).bind(new Date().toISOString()).first().catch(() => ({ count: 0 }));
   const recentUsers = await env.DB.prepare(`SELECT id, created_at, email, name, role, status, credits FROM users ORDER BY created_at DESC LIMIT 40`).all().catch(() => ({ results: [] }));
   const recentOrders = await env.DB.prepare(`SELECT * FROM orders ORDER BY created_at DESC LIMIT 40`).all().catch(() => ({ results: [] }));
   const recentReports = await env.DB.prepare(`SELECT id, created_at, method_name, question, report_json FROM reports ORDER BY created_at DESC LIMIT 40`).all().catch(() => ({ results: [] }));
+  const auditRows = await env.DB.prepare(`SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 18`).all().catch(() => ({ results: [] }));
+  const [userTrend, orderTrend, revenueTrend] = await Promise.all([queryDailyCounts(env, "users"), queryDailyCounts(env, "orders"), queryDailyRevenue(env)]);
   const filterText = (item) => JSON.stringify(item).toLowerCase().includes(q);
   const filteredOrders = (recentOrders.results || []).filter((item) => (status === "all" || item.status === status) && (!q || filterText(item)));
   const filteredUsers = (recentUsers.results || []).filter((item) => !q || filterText(item));
@@ -688,7 +819,22 @@ async function getAdminOverview(request, env) {
   return sendJson({
     ok: true,
     filters: { status, q },
-    metrics: { users: users.count || 0, reports: reports.count || 0, orders: orders.count || 0, paidOrders: paid.count || 0, revenue: paid.revenue || 0, revenueText: `¥${centsToYuan(paid.revenue || 0)}` },
+    metrics: {
+      users: users.count || 0,
+      reports: reports.count || 0,
+      orders: orders.count || 0,
+      paidOrders: paid.count || 0,
+      pendingOrders: pending.count || 0,
+      todayOrders: todayOrders.count || 0,
+      todayUsers: todayUsers.count || 0,
+      todayAmount: todayOrders.amount || 0,
+      todayAmountText: `¥${centsToYuan(todayOrders.amount || 0)}`,
+      activeMembers: activeMembers.count || 0,
+      revenue: paid.revenue || 0,
+      revenueText: `¥${centsToYuan(paid.revenue || 0)}`,
+    },
+    trends: { users: normalizeTrend(userTrend), orders: normalizeTrend(orderTrend), revenue: normalizeTrend(revenueTrend, "revenue") },
+    auditLogs: (auditRows.results || []).map(formatAuditRecord),
     users: filteredUsers.slice(0, 20).map(formatUserRecord),
     orders: filteredOrders.slice(0, 20).map(formatOrderRecord),
     reports: filteredReports.slice(0, 20).map(formatReportRecord),
@@ -753,4 +899,3 @@ export default {
     }
   },
 };
-
