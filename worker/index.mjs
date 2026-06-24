@@ -280,6 +280,25 @@ function sanitizeValues(values = {}) {
   };
 }
 
+function evaluateHighRiskQuery(values) {
+  const text = [values.question, values.background, values.focusProblem, values.options, values.nameBase].filter(Boolean).join(" ");
+  const rules = [
+    { code: "DEATH", pattern: /(死期|死亡时间|什么时候死|活不过|寿命还有|会不会死)/, label: "死亡或寿命预测" },
+    { code: "MEDICAL", pattern: /(诊断|癌症|肿瘤|手术|吃什么药|停药|治病|病能不能好|怀孕能不能保住)/, label: "医疗诊断或治疗" },
+    { code: "GAMBLING", pattern: /(彩票|博彩|赌博|时时彩|北京赛车|中奖号码|双色球|大乐透)/, label: "博彩或彩票预测" },
+    { code: "INVESTMENT", pattern: /(股票买哪|股票涨跌|币圈杠杆|合约做多|合约做空|期货买卖|荐股)/, label: "投资买卖指令" },
+    { code: "HARM", pattern: /(诅咒|害人|下降头|报复|让他倒霉|做法害|蛊术)/, label: "伤害他人或诅咒" },
+    { code: "FEAR_UPSELL", pattern: /(付费消灾|花钱改命|法事保证|保证复合|保证发财|破灾套餐)/, label: "恐吓式付费或保证承诺" },
+  ];
+  const hit = rules.find((rule) => rule.pattern.test(text));
+  if (!hit) return null;
+  return {
+    ok: false,
+    code: "HIGH_RISK_QUERY",
+    category: hit.code,
+    message: `这个问题涉及${hit.label}，本平台不能提供断言、指令或恐吓式判断。可以改问为：当前处境有哪些可整理的因素、接下来如何做现实规划、如何沟通或寻求专业帮助。`,
+  };
+}
 function sanitizeMethod(method = {}) {
   return {
     id: String(method.id || "integrated"),
@@ -384,7 +403,7 @@ function formatReportRecord(item) {
 }
 
 function formatOrderRecord(item) {
-  return { id: item.id, userId: item.user_id, createdAt: item.created_at, planId: item.plan_id, planName: item.plan_name, amount: item.amount, amountText: `¥${centsToYuan(item.amount)}`, status: item.status };
+  return { id: item.id, userId: item.user_id, createdAt: item.created_at, paidAt: item.paid_at, planId: item.plan_id, planName: item.plan_name, amount: item.amount, amountText: `¥${centsToYuan(item.amount)}`, status: item.status, provider: item.provider || "manual" };
 }
 
 function formatUserRecord(item) {
@@ -398,6 +417,8 @@ async function createReport(request, env) {
   const body = await readJson(request);
   const values = sanitizeValues(body.values);
   const method = sanitizeMethod(body.method);
+  const highRisk = evaluateHighRiskQuery(values);
+  if (highRisk) return sendJson(highRisk, 422);
   const errors = validateIntake(values);
   if (Object.keys(errors).length) return sendJson({ ok: false, errors }, 422);
   const tierInfo = REPORT_TIERS[values.reportTier];
@@ -491,6 +512,18 @@ async function createOrder(request, env) {
   return sendJson({ ok: true, order: { id, planId: body.planId, planName: plan.name, amount: plan.amount, amountText: `¥${centsToYuan(plan.amount)}`, status, checkoutUrl: "" } }, 201);
 }
 
+
+async function getOrderDetail(request, env, orderId) {
+  const missingDb = assertDb(env);
+  if (missingDb) return missingDb;
+  const auth = await requireUser(request, env);
+  if (auth.response) return auth.response;
+  const order = auth.session.role === "admin"
+    ? await env.DB.prepare(`SELECT * FROM orders WHERE id = ?`).bind(orderId).first()
+    : await env.DB.prepare(`SELECT * FROM orders WHERE id = ? AND user_id = ?`).bind(orderId, auth.session.userId).first();
+  if (!order) return sendJson({ ok: false, message: "订单不存在或无权查看。" }, 404);
+  return sendJson({ ok: true, order: formatOrderRecord(order) });
+}
 async function markMockPaid(request, env, orderId) {
   const missingDb = assertDb(env);
   if (missingDb) return missingDb;
@@ -655,6 +688,8 @@ async function handleApi(request, env) {
   if (request.method === "POST" && url.pathname === "/api/reports") return createReport(request, env);
   if (request.method === "POST" && url.pathname === "/api/orders") return createOrder(request, env);
   if (request.method === "POST" && url.pathname === "/api/payments/notify") return notifyPayment(request, env);
+  const orderDetailMatch = url.pathname.match(/^\/api\/orders\/([^/]+)$/);
+  if (request.method === "GET" && orderDetailMatch) return getOrderDetail(request, env, orderDetailMatch[1]);
   const mockPayMatch = url.pathname.match(/^\/api\/orders\/([^/]+)\/mock-pay$/);
   if (request.method === "POST" && mockPayMatch) return markMockPaid(request, env, mockPayMatch[1]);
   if (request.method === "GET" && url.pathname === "/api/admin/overview") return getAdminOverview(request, env);

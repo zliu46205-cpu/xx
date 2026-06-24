@@ -1,4 +1,4 @@
-﻿const API_BASE = import.meta.env.VITE_XUANXUE_API_BASE || "";
+const API_BASE = import.meta.env.VITE_XUANXUE_API_BASE || "";
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -74,6 +74,9 @@ export async function createOrder(planId, session) {
   });
 }
 
+export async function getOrderDetail(orderId, session) {
+  return request(`/api/orders/${encodeURIComponent(orderId)}`, { headers: authHeaders(session) });
+}
 export async function markMockPaid(orderId, session) {
   return request(`/api/orders/${orderId}/mock-pay`, {
     method: "POST",

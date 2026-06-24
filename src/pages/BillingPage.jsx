@@ -1,7 +1,7 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Notice } from "../components/Primitives";
 import { PageHeader } from "../components/Layout";
-import { createOrder, getAccount, markMockPaid } from "../utils/api";
+import { createOrder, getAccount, getOrderDetail, markMockPaid } from "../utils/api";
 
 export const plans = [
   { id: "free", name: "免费体验", price: 0, unit: "每日 1 次", credits: 1, badge: "拉新入口", desc: "问题归类、主象提示、简版建议和边界提醒。", features: ["简版报告", "基础术数选择", "可复制摘要"] },
@@ -54,6 +54,26 @@ export function BillingPage({ session, setRoute }) {
     }
   }
 
+
+  async function refreshOrder(message) {
+    if (!order || !session) return null;
+    setStatus("loading");
+    try {
+      const payload = await getOrderDetail(order.id, session);
+      setOrder(payload.order);
+      const nextAccount = await refreshAccount();
+      if (message) setNotice(message);
+      if (payload.order.status === "paid") {
+        setNotice(`订单已支付，权益已同步。当前剩余 ${formatCredits(nextAccount)} 次。`);
+      }
+      return payload.order;
+    } catch (error) {
+      setNotice(error.message || "订单状态查询失败。");
+      return null;
+    } finally {
+      setStatus("idle");
+    }
+  }
   async function simulatePay() {
     if (!order || !session) return;
     setStatus("loading");
@@ -78,7 +98,7 @@ export function BillingPage({ session, setRoute }) {
 
   return (
     <>
-      <PageHeader eyebrow="会员与支付" title="免费体验先建立信任，付费服务按价值分层" desc="当前页面是商业化支付系统骨架：套餐、订单、支付状态和权益都已规划。真实扣款需要接入 Stripe、微信支付或支付宝，并完成服务条款、退款规则和回调验签。" />
+      <PageHeader eyebrow="会员与支付" title="免费体验先建立信任，付费服务按价值分层" desc="当前页面是商业化支付系统骨架：套餐、订单、支付状态和权益都已规划。真实扣款需要接入微信支付、支付宝或 Stripe，并完成服务条款、退款规则和回调验签。" />
 
       <section className="billing-status-strip">
         <article><span>当前账户</span><strong>{session ? session.email || session.name : "未登录"}</strong><p>{session ? "订单和次数会保存到当前账号。" : "登录后才能购买套餐。"}</p></article>
@@ -103,10 +123,10 @@ export function BillingPage({ session, setRoute }) {
         <div>
           <span>订单状态</span>
           <h2>{order ? order.planName || order.plan_name : "尚未创建订单"}</h2>
-          <p>{order ? `订单号：${order.id} · 状态：${order.status} · 金额：${order.amountText || `¥${(order.amount / 100).toFixed(2)}`}` : "选择套餐后会生成订单。真实支付接入后这里会跳转支付收银台。"}</p>
+          <p>{order ? `订单号：${order.id} · 状态：${order.status} · 金额：${order.amountText || `¥${(order.amount / 100).toFixed(2)}`} · 渠道：${order.provider || "manual"}` : "选择套餐后会生成订单。真实支付接入后这里会跳转支付收银台。"}</p>
         </div>
         <div className="form-actions">
-          <Button type="button" variant="secondary" onClick={simulatePay} disabled={!order || status === "loading"}>{status === "loading" ? "处理中..." : "模拟支付成功"}</Button>
+          <Button type="button" variant="secondary" onClick={simulatePay} disabled={!order || status === "loading"}>{status === "loading" ? "处理中..." : "模拟支付成功"}</Button>`r`n          <Button type="button" variant="ghost" onClick={() => refreshOrder("订单状态已刷新。")} disabled={!order || status === "loading"}>查询支付结果</Button>
           <Button type="button" variant="ghost" onClick={() => refreshAccount("账户状态已刷新。")} disabled={!session || status === "loading"}>刷新权益</Button>
           <Button type="button" variant="ghost" onClick={() => setRoute("account")}>查看用户中心</Button>
         </div>

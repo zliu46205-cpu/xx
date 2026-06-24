@@ -248,6 +248,25 @@ function sanitizeValues(values = {}) {
   };
 }
 
+function evaluateHighRiskQuery(values) {
+  const text = [values.question, values.background, values.focusProblem, values.options, values.nameBase].filter(Boolean).join(" ");
+  const rules = [
+    { code: "DEATH", pattern: /(死期|死亡时间|什么时候死|活不过|寿命还有|会不会死)/, label: "死亡或寿命预测" },
+    { code: "MEDICAL", pattern: /(诊断|癌症|肿瘤|手术|吃什么药|停药|治病|病能不能好|怀孕能不能保住)/, label: "医疗诊断或治疗" },
+    { code: "GAMBLING", pattern: /(彩票|博彩|赌博|时时彩|北京赛车|中奖号码|双色球|大乐透)/, label: "博彩或彩票预测" },
+    { code: "INVESTMENT", pattern: /(股票买哪|股票涨跌|币圈杠杆|合约做多|合约做空|期货买卖|荐股)/, label: "投资买卖指令" },
+    { code: "HARM", pattern: /(诅咒|害人|下降头|报复|让他倒霉|做法害|蛊术)/, label: "伤害他人或诅咒" },
+    { code: "FEAR_UPSELL", pattern: /(付费消灾|花钱改命|法事保证|保证复合|保证发财|破灾套餐)/, label: "恐吓式付费或保证承诺" },
+  ];
+  const hit = rules.find((rule) => rule.pattern.test(text));
+  if (!hit) return null;
+  return {
+    ok: false,
+    code: "HIGH_RISK_QUERY",
+    category: hit.code,
+    message: `这个问题涉及${hit.label}，本平台不能提供断言、指令或恐吓式判断。可以改问为：当前处境有哪些可整理的因素、接下来如何做现实规划、如何沟通或寻求专业帮助。`,
+  };
+}
 function sanitizeMethod(method = {}) {
   return { id: String(method.id || "integrated"), name: String(method.name || "综合咨询"), scene: String(method.scene || ""), need: String(method.need || ""), output: String(method.output || ""), unsuitable: String(method.unsuitable || "") };
 }
@@ -263,7 +282,7 @@ function userRow(row) {
 }
 
 function orderRow(row) {
-  return { id: row.id, userId: row.userId, createdAt: row.createdAt, planId: row.planId, planName: row.planName, amount: row.amount, amountText: `¥${cents(row.amount)}`, status: row.status };
+  return { id: row.id, userId: row.userId, createdAt: row.createdAt, paidAt: row.paidAt, planId: row.planId, planName: row.planName, amount: row.amount, amountText: `¥${cents(row.amount)}`, status: row.status, provider: row.provider || "manual" };
 }
 
 async function register(req, res) {
@@ -306,6 +325,8 @@ async function createReport(req, res) {
   const body = await readJson(req);
   const values = sanitizeValues(body.values);
   const method = sanitizeMethod(body.method);
+  const highRisk = evaluateHighRiskQuery(values);
+  if (highRisk) return sendJson(res, 422, highRisk);
   const errors = validateIntake(values);
   if (Object.keys(errors).length) return sendJson(res, 422, { ok: false, errors });
   const tierInfo = REPORT_TIERS[values.reportTier];
@@ -387,6 +408,15 @@ async function createOrder(req, res) {
   sendJson(res, 201, { ok: true, order: orderRow(order) });
 }
 
+
+async function orderDetail(req, res, orderId) {
+  const session = requireSession(req, res);
+  if (!session) return;
+  const orders = await readList(files.orders);
+  const order = orders.find((item) => item.id === orderId && (session.role === "admin" || item.userId === session.userId));
+  if (!order) return sendJson(res, 404, { ok: false, message: "订单不存在或无权查看。" });
+  sendJson(res, 200, { ok: true, order: orderRow(order) });
+}
 async function mockPay(req, res, orderId) {
   const session = requireSession(req, res);
   if (!session) return;
@@ -519,6 +549,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/reports") return createReport(req, res);
     if (req.method === "POST" && url.pathname === "/api/orders") return createOrder(req, res);
     if (req.method === "POST" && url.pathname === "/api/payments/notify") return notifyPayment(req, res);
+    const orderMatch = url.pathname.match(/^\/api\/orders\/([^/]+)$/);
+    if (req.method === "GET" && orderMatch) return orderDetail(req, res, orderMatch[1]);
     const match = url.pathname.match(/^\/api\/orders\/([^/]+)\/mock-pay$/);
     if (req.method === "POST" && match) return mockPay(req, res, match[1]);
     if (req.method === "GET" && url.pathname === "/api/admin/overview") return adminOverview(req, res);
