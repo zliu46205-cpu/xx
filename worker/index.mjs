@@ -374,6 +374,36 @@ async function loginAdmin(request, env) {
   return sendJson({ ok: true, session: { token, user: { id: "admin", email: account, name: "管理员", role: "admin" } } });
 }
 
+
+async function exportAccountData(request, env) {
+  const missingDb = assertDb(env);
+  if (missingDb) return missingDb;
+  const auth = await requireUser(request, env);
+  if (auth.response) return auth.response;
+  if (auth.session.role !== "user") return sendJson({ ok: false, message: "管理员账号不支持用户数据导出。" }, 403);
+  const user = await env.DB.prepare(`SELECT id, created_at, email, name, role, status, credits FROM users WHERE id = ?`).bind(auth.session.userId).first();
+  const reports = await env.DB.prepare(`SELECT id, created_at, method_id, method_name, question, concern_type, report_json FROM reports WHERE user_id = ? ORDER BY created_at DESC`).bind(auth.session.userId).all().catch(() => ({ results: [] }));
+  const orders = await env.DB.prepare(`SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC`).bind(auth.session.userId).all().catch(() => ({ results: [] }));
+  const memberships = await env.DB.prepare(`SELECT * FROM memberships WHERE user_id = ? ORDER BY end_at DESC`).bind(auth.session.userId).all().catch(() => ({ results: [] }));
+  return sendJson({ ok: true, exportedAt: new Date().toISOString(), user, reports: reports.results || [], orders: (orders.results || []).map(formatOrderRecord), memberships: memberships.results || [] });
+}
+
+async function deleteAccountData(request, env) {
+  const missingDb = assertDb(env);
+  if (missingDb) return missingDb;
+  const auth = await requireUser(request, env);
+  if (auth.response) return auth.response;
+  if (auth.session.role !== "user") return sendJson({ ok: false, message: "管理员账号不能通过用户入口注销。" }, 403);
+  const body = await readJson(request);
+  if (String(body.confirm || "") !== "DELETE") {
+    return sendJson({ ok: false, message: "请传入 confirm=DELETE 以确认注销。" }, 422);
+  }
+  await env.DB.prepare(`DELETE FROM reports WHERE user_id = ?`).bind(auth.session.userId).run().catch(() => null);
+  await env.DB.prepare(`DELETE FROM memberships WHERE user_id = ?`).bind(auth.session.userId).run().catch(() => null);
+  await env.DB.prepare(`DELETE FROM orders WHERE user_id = ?`).bind(auth.session.userId).run().catch(() => null);
+  await env.DB.prepare(`UPDATE users SET email = ?, name = '已注销用户', status = 'disabled', credits = 0 WHERE id = ?`).bind(`deleted-${auth.session.userId}@deleted.local`, auth.session.userId).run();
+  return sendJson({ ok: true, message: "账户资料已删除并停用。" });
+}
 async function getAccount(request, env) {
   const missingDb = assertDb(env);
   if (missingDb) return missingDb;
@@ -682,6 +712,8 @@ async function handleApi(request, env) {
   if (request.method === "POST" && url.pathname === "/api/auth/login") return loginUser(request, env);
   if (request.method === "POST" && url.pathname === "/api/admin/login") return loginAdmin(request, env);
   if (request.method === "GET" && url.pathname === "/api/account") return getAccount(request, env);
+  if (request.method === "GET" && url.pathname === "/api/account/export") return exportAccountData(request, env);
+  if (request.method === "POST" && url.pathname === "/api/account/delete") return deleteAccountData(request, env);
   if (request.method === "GET" && url.pathname === "/api/reports") return listReports(request, env);
   const reportDetailMatch = url.pathname.match(/^\/api\/reports\/([^/]+)$/);
   if (request.method === "GET" && reportDetailMatch) return getReportDetail(request, env, reportDetailMatch[1]);

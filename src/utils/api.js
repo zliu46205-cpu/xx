@@ -10,7 +10,7 @@ async function request(path, options = {}) {
   });
   const payload = await response.json();
   if (!response.ok || payload.ok === false) {
-    const error = new Error(payload.message || "请求失败");
+    const error = new Error(payload.message || "璇锋眰澶辫触");
     error.payload = payload;
     throw error;
   }
@@ -111,5 +111,16 @@ export async function reviewAdminReport(reportId, values, session) {
     method: "POST",
     headers: authHeaders(session),
     body: JSON.stringify(values),
+  });
+}
+export async function exportAccountData(session) {
+  return request("/api/account/export", { headers: authHeaders(session) });
+}
+
+export async function deleteAccountData(session) {
+  return request("/api/account/delete", {
+    method: "POST",
+    headers: authHeaders(session),
+    body: JSON.stringify({ confirm: "DELETE" }),
   });
 }

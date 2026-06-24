@@ -382,6 +382,39 @@ async function reportDetail(req, res, reportId) {
   sendJson(res, 200, { ok: true, report: row.report, record: reportRow(row) });
 }
 
+
+async function exportAccountData(req, res) {
+  const session = requireSession(req, res);
+  if (!session) return;
+  if (session.role !== "user") return sendJson(res, 403, { ok: false, message: "管理员账号不支持用户数据导出。" });
+  const users = await readList(files.users);
+  const reports = await readList(files.reports);
+  const orders = await readList(files.orders);
+  const memberships = await readList(files.memberships);
+  const user = users.find((item) => item.id === session.userId) || null;
+  sendJson(res, 200, { ok: true, exportedAt: new Date().toISOString(), user, reports: reports.filter((item) => item.userId === session.userId), orders: orders.filter((item) => item.userId === session.userId).map(orderRow), memberships: memberships.filter((item) => item.userId === session.userId) });
+}
+
+async function deleteAccountData(req, res) {
+  const session = requireSession(req, res);
+  if (!session) return;
+  if (session.role !== "user") return sendJson(res, 403, { ok: false, message: "管理员账号不能通过用户入口注销。" });
+  const body = await readJson(req);
+  if (String(body.confirm || "") !== "DELETE") return sendJson(res, 422, { ok: false, message: "请传入 confirm=DELETE 以确认注销。" });
+  const users = await readList(files.users);
+  const user = users.find((item) => item.id === session.userId);
+  if (user) {
+    user.email = `deleted-${session.userId}@deleted.local`;
+    user.name = "已注销用户";
+    user.status = "disabled";
+    user.credits = 0;
+    await saveList(files.users, users);
+  }
+  await saveList(files.reports, (await readList(files.reports)).filter((item) => item.userId !== session.userId));
+  await saveList(files.orders, (await readList(files.orders)).filter((item) => item.userId !== session.userId));
+  await saveList(files.memberships, (await readList(files.memberships)).filter((item) => item.userId !== session.userId));
+  sendJson(res, 200, { ok: true, message: "账户资料已删除并停用。" });
+}
 async function account(req, res) {
   const session = requireSession(req, res);
   if (!session) return;
@@ -543,6 +576,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/auth/login") return login(req, res);
     if (req.method === "POST" && url.pathname === "/api/admin/login") return adminLogin(req, res);
     if (req.method === "GET" && url.pathname === "/api/account") return account(req, res);
+    if (req.method === "GET" && url.pathname === "/api/account/export") return exportAccountData(req, res);
+    if (req.method === "POST" && url.pathname === "/api/account/delete") return deleteAccountData(req, res);
     if (req.method === "GET" && url.pathname === "/api/reports") return listReports(req, res);
     const reportMatch = url.pathname.match(/^\/api\/reports\/([^/]+)$/);
     if (req.method === "GET" && reportMatch) return reportDetail(req, res, reportMatch[1]);

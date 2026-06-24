@@ -1,7 +1,7 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Notice } from "../components/Primitives";
 import { PageHeader } from "../components/Layout";
-import { getAccount, getReportDetail } from "../utils/api";
+import { deleteAccountData, exportAccountData, getAccount, getReportDetail } from "../utils/api";
 
 function formatReportText(report) {
   if (!report) return "";
@@ -68,6 +68,35 @@ export function AccountPage({ session, setRoute }) {
     URL.revokeObjectURL(url);
   }
 
+
+  async function exportAccount() {
+    try {
+      const payload = await exportAccountData(session);
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `xuanxue-account-${user.id || "data"}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setNotice("账户数据已导出。请妥善保存，不要公开出生资料、订单号和报告内容。");
+    } catch (error) {
+      setNotice(error.message || "账户数据导出失败。");
+    }
+  }
+
+  async function deleteAccount() {
+    const confirmed = window.confirm("确认注销当前账号并删除报告、订单、会员记录吗？此操作不可恢复。");
+    if (!confirmed) return;
+    try {
+      await deleteAccountData(session);
+      localStorage.removeItem("xuanxue-session");
+      setNotice("账户已注销，页面将返回首页。");
+      setTimeout(() => window.location.reload(), 900);
+    } catch (error) {
+      setNotice(error.message || "账户注销失败。");
+    }
+  }
   if (!session) {
     return (
       <section className="auth-page">
@@ -98,6 +127,18 @@ export function AccountPage({ session, setRoute }) {
         <article className="account-card"><span>报告数量</span><strong>{stats.reports}</strong><p>已保存的测算报告。</p></article>
         <article className="account-card"><span>剩余次数</span><strong>{stats.credits}</strong><p>用于生成完整报告或专题报告。</p></article>
         <article className="account-card"><span>订单数量</span><strong>{stats.orders}</strong><p>包含待支付、已支付和已取消订单。</p></article>
+      </section>
+
+      <section className="account-privacy-panel">
+        <div>
+          <span>隐私与数据</span>
+          <h2>导出或注销账号</h2>
+          <p>出生资料、问题背景、报告内容和订单记录都属于敏感信息。你可以导出自己的数据，也可以注销账号并删除当前账号关联记录。</p>
+        </div>
+        <div className="form-actions">
+          <Button type="button" variant="secondary" onClick={exportAccount}>导出数据</Button>
+          <Button type="button" variant="ghost" onClick={deleteAccount}>注销账号</Button>
+        </div>
       </section>
 
       <section className="account-layout">
