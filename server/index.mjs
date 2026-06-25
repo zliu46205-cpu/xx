@@ -413,6 +413,30 @@ function userRow(row) {
   return { id: row.id, createdAt: row.createdAt, email: row.email, name: row.name, role: row.role, status: row.status, credits: row.credits || 0 };
 }
 
+function buildPaymentInstructions(order, provider = "manual") {
+  const receiverName = String(process.env.PAYMENT_RECEIVER_NAME || "").trim();
+  const wechatQrUrl = String(process.env.PAYMENT_WECHAT_QR_URL || "").trim();
+  const alipayQrUrl = String(process.env.PAYMENT_ALIPAY_QR_URL || "").trim();
+  const bankName = String(process.env.PAYMENT_BANK_NAME || "").trim();
+  const bankAccount = String(process.env.PAYMENT_BANK_ACCOUNT || "").trim();
+  const bankAccountName = String(process.env.PAYMENT_BANK_ACCOUNT_NAME || receiverName || "").trim();
+  const extraNote = String(process.env.PAYMENT_MANUAL_NOTE || "").trim();
+  return {
+    type: "manual_qr",
+    provider,
+    amountText: `\u00a5${cents(order.amount)}`,
+    receiverName,
+    wechatQrUrl,
+    alipayQrUrl,
+    bankName,
+    bankAccount,
+    bankAccountName,
+    transferNote: `ORDER:${order.id}`,
+    notice: extraNote || "\u4ed8\u6b3e\u65f6\u8bf7\u5907\u6ce8\u8ba2\u5355\u53f7\uff0c\u4ed8\u6b3e\u5b8c\u6210\u540e\u7b49\u5f85\u7ba1\u7406\u5458\u786e\u8ba4\u5230\u8d26\u5e76\u53d1\u653e\u6b21\u6570\u3002",
+    configured: Boolean(wechatQrUrl || alipayQrUrl || bankAccount || extraNote),
+  };
+}
+
 function orderRow(row) {
   return { id: row.id, userId: row.userId, createdAt: row.createdAt, paidAt: row.paidAt, planId: row.planId, planName: row.planName, amount: row.amount, amountText: `¥${cents(row.amount)}`, status: row.status, provider: row.provider || "manual" };
 }
@@ -571,7 +595,7 @@ async function createOrder(req, res) {
   orders.unshift(order);
   await saveList(files.orders, orders);
   if (plan.amount === 0) await applyPlanBenefits(order);
-  sendJson(res, 201, { ok: true, order: orderRow(order) });
+  sendJson(res, 201, { ok: true, order: { ...orderRow(order), paymentInstructions: buildPaymentInstructions(order, provider) } });
 }
 
 

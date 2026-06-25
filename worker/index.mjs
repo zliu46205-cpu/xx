@@ -437,6 +437,31 @@ async function paymentSignature(secret, payload) {
   return hmac(payload, secret);
 }
 
+function buildPaymentInstructions(order, provider, env) {
+  const amountText = `\u00a5${centsToYuan(order.amount)}`;
+  const receiverName = String(env.PAYMENT_RECEIVER_NAME || "").trim();
+  const wechatQrUrl = String(env.PAYMENT_WECHAT_QR_URL || "").trim();
+  const alipayQrUrl = String(env.PAYMENT_ALIPAY_QR_URL || "").trim();
+  const bankName = String(env.PAYMENT_BANK_NAME || "").trim();
+  const bankAccount = String(env.PAYMENT_BANK_ACCOUNT || "").trim();
+  const bankAccountName = String(env.PAYMENT_BANK_ACCOUNT_NAME || receiverName || "").trim();
+  const extraNote = String(env.PAYMENT_MANUAL_NOTE || "").trim();
+  return {
+    type: "manual_qr",
+    provider,
+    amountText,
+    receiverName,
+    wechatQrUrl,
+    alipayQrUrl,
+    bankName,
+    bankAccount,
+    bankAccountName,
+    transferNote: `ORDER:${order.id}`,
+    notice: extraNote || "\u4ed8\u6b3e\u65f6\u8bf7\u5907\u6ce8\u8ba2\u5355\u53f7\uff0c\u4ed8\u6b3e\u5b8c\u6210\u540e\u7b49\u5f85\u7ba1\u7406\u5458\u786e\u8ba4\u5230\u8d26\u5e76\u53d1\u653e\u6b21\u6570\u3002",
+    configured: Boolean(wechatQrUrl || alipayQrUrl || bankAccount || extraNote),
+  };
+}
+
 async function buildCheckoutUrl(order, provider, env) {
   if (Number(order.amount || 0) <= 0) return "";
   const baseUrl = String(env.PAYMENT_CHECKOUT_BASE_URL || "").trim();
