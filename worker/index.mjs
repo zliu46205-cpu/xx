@@ -7,7 +7,7 @@ const jsonHeaders = {
   "access-control-allow-headers": "content-type, authorization",
 };
 
-const API_VERSION = "deepseek-json-v4";
+const API_VERSION = "deepseek-json-v5";
 
 const PAYMENT_PROVIDERS = new Set(["manual", "generic_hmac", "wechat", "alipay", "stripe"]);
 
@@ -155,31 +155,39 @@ async function generateAiReport(baseReport, values, method, env) {
     baseReport,
   };
 
-  const response = await fetch("https://api.deepseek.com/chat/completions", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${env.DEEPSEEK_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: AI_REPORT_INSTRUCTIONS },
-        { role: "user", content: `请基于以下输入生成${tier.name}。档位要求：${tier.guidance}。术数专项要求：${input.methodGuide}。问题场景：${input.questionScene}。请明显区分本方法和其他方法，避免套话。只返回 JSON，不要 Markdown。\n${JSON.stringify(input)}` },
-      ],
-      temperature: 0.75,
-      response_format: { type: "json_object" },
-      max_tokens: tier.maxTokens,
-    }),
-  });
+  let lastError;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = await fetch("https://api.deepseek.com/chat/completions", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${env.DEEPSEEK_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: AI_REPORT_INSTRUCTIONS },
+          { role: "user", content: `请基于以下输入生成${tier.name}。档位要求：${tier.guidance}。术数专项要求：${input.methodGuide}。问题场景：${input.questionScene}。请明显区分本方法和其他方法，避免套话。只返回 JSON，不要 Markdown。\n${JSON.stringify(input)}` },
+        ],
+        temperature: attempt === 0 ? 0.75 : 0.35,
+        response_format: { type: "json_object" },
+        max_tokens: tier.maxTokens + (attempt === 0 ? 0 : 800),
+      }),
+    });
 
-  if (!response.ok) {
-    throw new Error(`DeepSeek request failed: ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`DeepSeek request failed: ${response.status}`);
+    }
+    const payload = await response.json();
+    const text = stripCodeFence(extractResponseText(payload));
+    try {
+      const parsed = parseAiJson(text);
+      return mergeAiReport(baseReport, parsed);
+    } catch (error) {
+      lastError = error;
+    }
   }
-  const payload = await response.json();
-  const text = stripCodeFence(extractResponseText(payload));
-  const parsed = parseAiJson(text);
-  return mergeAiReport(baseReport, parsed);
+  throw lastError || new Error("DeepSeek JSON parse failed");
 }
 function sendJson(payload, status = 200) {
   return new Response(JSON.stringify(payload), { status, headers: jsonHeaders });

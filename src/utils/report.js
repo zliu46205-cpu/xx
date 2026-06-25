@@ -1,4 +1,4 @@
-﻿const topicProfiles = {
+const topicProfiles = {
   career: {
     keys: ["工作", "事业", "跳槽", "offer", "创业", "升职", "合作", "项目", "领导", "岗位", "面试", "客户", "转行", "失业"],
     label: "事业",
@@ -65,6 +65,24 @@ const defaultTopic = {
   advice: ["把问题改写成一句可验证的话，例如“我是否应在三个月内做某个动作”。", "先分清：哪些是事实，哪些是猜测，哪些是情绪。", "下一步只做一个小动作，用反馈决定是否继续。"],
 };
 
+const methodLabels = {
+  bazi: "八字命理",
+  ziwei: "紫微斗数",
+  meihua: "梅花易数",
+  liuyao: "六爻占断",
+  coins: "铜钱占卜",
+  qimen: "奇门遁甲",
+  fengshui: "风水布局",
+  zeday: "择日择时",
+  naming: "起名策划",
+  integrated: "综合咨询",
+};
+
+function resolveMethodName(method, methodSystem) {
+  const candidate = String(method?.name || "").trim();
+  if (candidate && !/^\?+$/.test(candidate)) return candidate;
+  return methodLabels[method?.id] || methodSystem?.name || "综合咨询";
+}
 const methodSystems = {
   bazi: {
     scoreBase: 77,
@@ -354,8 +372,8 @@ export function buildReport(values, method) {
   if (risk.blocked) {
     return {
       id: `R-${Date.now().toString(36).toUpperCase()}`,
-      title: `${method?.name || "综合咨询"} · 安全边界提醒`,
-      method: method?.name || "综合咨询",
+      title: `${methodName} · 安全边界提醒`,
+      method: methodName,
       question,
       createdAt: new Date().toLocaleString("zh-CN", { hour12: false }),
       summary: risk.summary,
@@ -378,11 +396,11 @@ export function buildReport(values, method) {
   const worry = pick(topic.worry, seed, 2);
 
   const summary = `${decision} 核心卡点在“${worry}”，不是一句好坏可以概括。`;
-  const situation = `你问的是：“${question}”。按${method?.name || methodSystem.name}来看，此问属于“${topic.label}”类，意图偏向“${intent}”。当前资料完整度约为 ${completeness.score}/100；缺项为：${missingText}。因此本报告采用“${methodSystem.mode} 方法 + 简化取象 + 现实建议”的层级，不作绝对断语。`;
+  const situation = `你问的是：“${question}”。按${methodName}来看，此问属于“${topic.label}”类，意图偏向“${intent}”。当前资料完整度约为 ${completeness.score}/100；缺项为：${missingText}。因此本报告采用“${methodSystem.mode} 方法 + 简化取象 + 现实建议”的层级，不作绝对断语。`;
   const tendency = `趋势上，${mainSymbol}代表当前主象，${changedSymbol}代表后续转向。若你能先处理“${worry}”，并在${values.timeRange || "近期"}内取得一次明确反馈，局势会比现在清楚；若继续只在心里反复推演，容易把小阻力拖成长消耗。`;
 
   const basis = [
-    `所用法门：${method?.name || methodSystem.name}`,
+    `所用法门：${methodName}`,
     `问题分类：${topic.label}`,
     `提问意图：${intent}`,
     `参看术语：${methodSystem.anchors.join("、")}`,
@@ -408,8 +426,8 @@ export function buildReport(values, method) {
 
   return {
     id: `R-${Date.now().toString(36).toUpperCase()}`,
-    title: `${method?.name || methodSystem.name} · ${topic.label}参考报告`,
-    method: method?.name || methodSystem.name,
+    title: `${methodName} · ${topic.label}参考报告`,
+    method: methodName,
     question,
     createdAt: new Date().toLocaleString("zh-CN", { hour12: false }),
     summary,
