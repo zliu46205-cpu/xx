@@ -163,7 +163,8 @@ async function generateAiReport(baseReport, values, method, env) {
   };
 
   let lastError;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const retryHint = attempt === 0 ? "" : "上一次返回不是合法 JSON。请重新生成紧凑 JSON：必须以 { 开头、以 } 结尾，所有字符串闭合，数组元素用逗号分隔，不能输出 Markdown、注释或多余解释。";
     const response = await fetch("https://api.deepseek.com/chat/completions", {
       method: "POST",
       headers: {
@@ -174,11 +175,11 @@ async function generateAiReport(baseReport, values, method, env) {
         model,
         messages: [
           { role: "system", content: AI_REPORT_INSTRUCTIONS },
-          { role: "user", content: `请基于以下输入生成${tier.name}。档位要求：${tier.guidance}。术数专项要求：${input.methodGuide}。问题场景：${input.questionScene}。请明显区分本方法和其他方法，避免套话。只返回 JSON，不要 Markdown。不要照抄 baseReportDigest 的原文；必须根据用户原问、method.id 和 questionScene 重写 summary、situation、tendency、inference、suggestions。\n${JSON.stringify(input)}` },
+          { role: "user", content: `请基于以下输入生成${tier.name}。档位要求：${tier.guidance}。术数专项要求：${input.methodGuide}。问题场景：${input.questionScene}。请明显区分本方法和其他方法，避免套话。只返回 JSON，不要 Markdown。不要照抄 baseReportDigest 的原文；必须根据用户原问、method.id 和 questionScene 重写 summary、situation、tendency、inference、suggestions。${retryHint}\n${JSON.stringify(input)}` },
         ],
-        temperature: attempt === 0 ? 0.75 : 0.35,
+        temperature: attempt === 0 ? 0.75 : attempt === 1 ? 0.35 : 0.2,
         response_format: { type: "json_object" },
-        max_tokens: tier.maxTokens + (attempt === 0 ? 0 : 800),
+        max_tokens: tier.maxTokens + attempt * 800,
       }),
     });
 
