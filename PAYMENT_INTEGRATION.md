@@ -1,3 +1,7 @@
+# Public beta payment pause
+
+The current public site keeps price cards for future service tiers, but the frontend does not create payment orders or show QR checkout while the launch beta is free. Set `FREE_PUBLIC_BETA=true` to keep paid report tiers usable without credit deduction.
+
 ﻿# Payment Integration
 
 This project exposes only two payment choices to users:

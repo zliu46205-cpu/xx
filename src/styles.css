@@ -2475,3 +2475,99 @@ input:focus, textarea:focus, select:focus {
   line-height: 1.7;
   text-align: center;
 }
+
+.beta-notice-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(8px);
+}
+.beta-notice-card {
+  position: relative;
+  width: min(620px, 100%);
+  border: 1px solid rgba(212, 175, 55, 0.34);
+  background:
+    linear-gradient(145deg, rgba(38, 31, 20, 0.96), rgba(10, 9, 7, 0.98)),
+    var(--paper-texture);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.48), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  padding: clamp(24px, 4vw, 42px);
+  color: var(--faint);
+}
+.beta-notice-card h2 {
+  margin: 12px 0 14px;
+  color: var(--gold-2);
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 4vw, 3rem);
+  line-height: 1.12;
+}
+.beta-notice-card p,
+.beta-notice-card small {
+  display: block;
+  color: var(--faint);
+  line-height: 1.85;
+}
+.beta-notice-card small {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(212, 175, 55, 0.16);
+  color: var(--muted);
+}
+.beta-notice-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(212, 175, 55, 0.24);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--gold-2);
+  cursor: pointer;
+  font-size: 22px;
+}
+.beta-notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
+.beta-free-strip strong {
+  color: var(--gold-2);
+}
+.beta-announcement-panel {
+  margin: 0 auto 28px;
+  width: min(1120px, calc(100% - 48px));
+  border: 1px solid rgba(212, 175, 55, 0.22);
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.1), rgba(255, 255, 255, 0.035));
+  padding: clamp(20px, 3vw, 32px);
+}
+.beta-announcement-panel span,
+.beta-feedback-box span {
+  color: var(--gold);
+  font-family: var(--font-ui);
+  font-weight: 900;
+}
+.beta-announcement-panel h2 {
+  margin: 10px 0;
+  color: var(--gold-2);
+  font-family: var(--font-display);
+  font-size: clamp(1.6rem, 3vw, 2.6rem);
+}
+.beta-announcement-panel p,
+.beta-feedback-box p {
+  color: var(--faint);
+  line-height: 1.8;
+}
+.beta-payment-paused .payment-box {
+  display: grid;
+  align-content: center;
+  min-height: 220px;
+}
+@media (max-width: 640px) {
+  .beta-notice-overlay { padding: 14px; }
+  .beta-notice-actions .btn { width: 100%; }
+  .beta-announcement-panel { width: min(100% - 28px, 1120px); }
+}

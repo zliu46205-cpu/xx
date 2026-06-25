@@ -480,7 +480,9 @@ async function createReport(req, res) {
   const errors = validateIntake(values);
   if (Object.keys(errors).length) return sendJson(res, 422, { ok: false, errors });
   const tierInfo = REPORT_TIERS[values.reportTier];
-  const creditCost = tierInfo.creditCost || 0;
+  const rawCreditCost = tierInfo.creditCost || 0;
+  const freePublicBeta = process.env.FREE_PUBLIC_BETA !== "false";
+  const creditCost = freePublicBeta ? 0 : rawCreditCost;
   let users = null;
   let user = null;
   if (creditCost > 0) {
@@ -500,7 +502,7 @@ async function createReport(req, res) {
   } catch (error) {
     report = { ...report, generatedBy: "rules", aiError: String(error?.message || "AI_GENERATION_FALLBACK").slice(0, 180) };
   }
-  report = { ...report, methodId: method.id, qualityReview: scoreReportQuality({ ...report, methodId: method.id }) };
+  report = { ...report, methodId: method.id, publicBetaFree: freePublicBeta, qualityReview: scoreReportQuality({ ...report, methodId: method.id }) };
   if (creditCost > 0 && report.generatedBy !== "deepseek") {
     return sendJson(res, 503, { ok: false, code: "PAID_REPORT_AI_UNAVAILABLE", message: "深度生成服务暂时不可用，本次未扣次数。请稍后重试，或先生成免费简版。", aiError: report.aiError || "AI_GENERATION_FALLBACK" });
   }
@@ -512,7 +514,7 @@ async function createReport(req, res) {
     await saveList(files.users, users);
     report = { ...report, creditCost };
   }
-  sendJson(res, 201, { ok: true, report, saved: true, creditCost });
+  sendJson(res, 201, { ok: true, report, saved: true, creditCost, publicBetaFree: freePublicBeta });
 }
 
 async function listReports(req, res) {
