@@ -32,6 +32,58 @@ const REPORT_TIERS = {
   deep: { name: "深度报告", maxTokens: 4600, creditCost: 3, guidance: "深度报告增加假设限制、阶段拆解、术语解释、行动清单和复盘问题；仍不得恐吓或保证结果。" },
 };
 
+const METHOD_REPORT_STRUCTURES = {
+  bazi: {
+    sections: ["命局前提", "日主与月令", "十神结构", "财官印食与所问事项", "阶段运势参考", "现实行动建议", "假设与边界"],
+    requiredTerms: ["日主", "月令", "十神", "财官印食", "用神", "大运流年"],
+    writingRule: "先说明出生资料是否足够，再以日主为体、月令为纲、十神分人事。必须把术语翻译成事业、关系、财务、作息等现实语言。",
+  },
+  ziwei: {
+    sections: ["命盘前提", "核心宫位", "三方四正", "主星与辅曜", "四化与格局", "阶段倾向", "现实建议"],
+    requiredTerms: ["命宫", "身宫", "十二宫", "三方四正", "四化", "大限流年"],
+    writingRule: "不得只列星名；必须说明所问事项落在哪些宫位，以及这些宫位如何转成现实角色、资源、压力和关系。",
+  },
+  meihua: {
+    sections: ["所问之事", "起卦方式", "本卦互卦变卦", "体用关系", "动爻与外应", "倾向判断", "行动建议"],
+    requiredTerms: ["本卦", "互卦", "变卦", "体用", "动爻", "生克"],
+    writingRule: "先讲当前象，再讲内里结构，再讲后续变化。必须把卦象翻译成可执行的观察点和沟通策略。",
+  },
+  liuyao: {
+    sections: ["问题定义", "卦象信息", "用神与世应", "六亲六神", "动变关系", "应期参考", "现实行动"],
+    requiredTerms: ["用神", "世应", "六亲", "六神", "动爻", "变爻", "旬空"],
+    writingRule: "必须先定用神，再看世应关系和动变。没有正式卦象时要说明按简化模拟路径，不得给绝对结果。",
+  },
+  coins: {
+    sections: ["三钱起卦", "本卦与变卦", "动爻位置", "卦辞象辞", "白话翻译", "建议事项", "注意事项"],
+    requiredTerms: ["三钱", "本卦", "变卦", "动爻", "卦辞", "象辞"],
+    writingRule: "铜钱占卜要围绕一事一问，重在把卦辞象辞转成选择建议，不得只给吉凶。",
+  },
+  qimen: {
+    sections: ["用局前提", "用神定位", "九宫组合", "八门九星八神", "时机方向策略", "风险点", "行动建议"],
+    requiredTerms: ["九宫", "八门", "九星", "八神", "值符", "值使", "用神"],
+    writingRule: "奇门用于短期策略和时空决策。必须比较机会、阻力、方向、时机和行动顺序，不得写成命运定论。",
+  },
+  fengshui: {
+    sections: ["空间概况", "主要问题", "明堂气口动线", "采光通风与功能冲突", "低成本调整", "不建议做的事", "边界提醒"],
+    requiredTerms: ["明堂", "气口", "动线", "坐向", "采光", "形煞"],
+    writingRule: "风水优先给低成本、可逆、可验证的空间调整。不得声称布局导致疾病、死亡、破产或离婚。",
+  },
+  zeday: {
+    sections: ["事项前提", "日期范围", "避冲条件", "可用窗口", "准备事项", "现实约束", "边界提醒"],
+    requiredTerms: ["择日", "黄道", "冲合", "时辰", "节气", "宜忌"],
+    writingRule: "择日只能优化节奏，必须结合现实约束、人员、场地、合同、天气和准备状态。",
+  },
+  naming: {
+    sections: ["命名目标", "风格方向", "五行意象", "音形义", "候选方向", "避讳事项", "推荐组合"],
+    requiredTerms: ["五行意象", "音形义", "字形", "谐音", "避讳", "传播场景"],
+    writingRule: "起名要讲清使用场景、受众和传播效果；不得承诺改名改变命运。",
+  },
+  integrated: {
+    sections: ["问题整理", "适用方法", "象征主线", "现实翻译", "下一步行动", "何时需要补资料", "边界提醒"],
+    requiredTerms: ["主象", "取象", "体用", "应事", "现实校验"],
+    writingRule: "综合咨询先把问题分类，再说明更适合哪种术数；重点是把混乱问题转成可执行步骤。",
+  },
+};
 function normalizeReportTier(value) {
   return REPORT_TIERS[value] ? value : "free";
 }
@@ -102,6 +154,7 @@ async function generateAiReport(baseReport, values, method) {
     method,
     reportTier,
     tierGuidance: tier.guidance,
+    reportStructure: METHOD_REPORT_STRUCTURES[method.id] || METHOD_REPORT_STRUCTURES.integrated,
     values: {
       question: values.question,
       concernType: values.concernType,
@@ -146,7 +199,7 @@ async function generateAiReport(baseReport, values, method) {
         model,
         messages: [
           { role: "system", content: AI_REPORT_INSTRUCTIONS },
-          { role: "user", content: `请基于以下输入生成${tier.name}。档位要求：${tier.guidance}。只返回 JSON，不要 Markdown。不要照抄 baseReportDigest 的原文；必须根据用户原问、method.id 和 questionScene 重写 summary、situation、tendency、inference、suggestions。${retryHint}\n${JSON.stringify(input)}` },
+          { role: "user", content: `请基于以下输入生成${tier.name}。档位要求：${tier.guidance}。只返回 JSON，不要 Markdown。不要照抄 baseReportDigest 的原文；必须根据用户原问、method.id、questionScene 和 reportStructure 重写 summary、situation、tendency、inference、suggestions；报告章节和推演顺序必须服从 reportStructure.sections。${retryHint}\n${JSON.stringify(input)}` },
         ],
         temperature: attempt === 0 ? 0.75 : attempt === 1 ? 0.35 : 0.2,
         response_format: { type: "json_object" },
