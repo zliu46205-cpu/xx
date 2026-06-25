@@ -584,10 +584,72 @@ async function getAccount(request, env) {
   });
 }
 
+
+
+const QUALITY_TERM_GROUPS = {
+  bazi: ["\u65e5\u4e3b", "\u6708\u4ee4", "\u5341\u795e", "\u8d22", "\u5b98", "\u5370", "\u98df\u4f24", "\u7528\u795e", "\u5927\u8fd0", "\u6d41\u5e74"],
+  ziwei: ["\u547d\u5bab", "\u8eab\u5bab", "\u5341\u4e8c\u5bab", "\u4e09\u65b9\u56db\u6b63", "\u56db\u5316", "\u4e3b\u661f", "\u8f85\u661f", "\u5927\u9650", "\u6d41\u5e74"],
+  meihua: ["\u672c\u5366", "\u4e92\u5366", "\u53d8\u5366", "\u4f53\u7528", "\u52a8\u723b", "\u751f\u514b", "\u5916\u5e94"],
+  liuyao: ["\u7528\u795e", "\u4e16\u5e94", "\u516d\u4eb2", "\u516d\u795e", "\u52a8\u723b", "\u53d8\u723b", "\u65ec\u7a7a", "\u5e94\u671f"],
+  coins: ["\u4e09\u94b1", "\u672c\u5366", "\u53d8\u5366", "\u52a8\u723b", "\u5366\u8f9e", "\u8c61\u8f9e"],
+  qimen: ["\u4e5d\u5bab", "\u516b\u95e8", "\u4e5d\u661f", "\u516b\u795e", "\u503c\u7b26", "\u503c\u4f7f", "\u7528\u795e"],
+  fengshui: ["\u660e\u5802", "\u6c14\u53e3", "\u52a8\u7ebf", "\u5750\u5411", "\u91c7\u5149", "\u5f62\u715e", "\u65b9\u4f4d"],
+  zeday: ["\u62e9\u65e5", "\u9ec4\u9053", "\u51b2\u5408", "\u65f6\u8fb0", "\u8282\u6c14", "\u5b9c\u5fcc"],
+  naming: ["\u4e94\u884c", "\u97f3\u5f62\u4e49", "\u5b57\u5f62", "\u8c10\u97f3", "\u907f\u8bb3", "\u5bd3\u610f"],
+  integrated: ["\u4e3b\u8c61", "\u53d6\u8c61", "\u4f53\u7528", "\u5e94\u4e8b", "\u73b0\u5b9e\u6821\u9a8c", "\u95ee\u9898\u5f52\u7c7b"],
+};
+
+function collectReportText(value) {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map(collectReportText).join(" ");
+  if (typeof value === "object") return Object.values(value).map(collectReportText).join(" ");
+  return "";
+}
+
+function includesAny(text, terms) {
+  return terms.some((term) => text.includes(term));
+}
+
+function scoreReportQuality(report = {}) {
+  const methodId = String(report.methodId || report.method?.id || report.method || report.method_id || "integrated").toLowerCase();
+  const terms = [...(QUALITY_TERM_GROUPS[methodId] || QUALITY_TERM_GROUPS.integrated), ...QUALITY_TERM_GROUPS.integrated];
+  const text = collectReportText(report);
+  const adviceText = collectReportText([report.suggestions, report.stageAdvice, report.actionPlan]);
+  const generatedByAi = report.generatedBy === "deepseek";
+  const hasMethodTerms = includesAny(text, terms);
+  const hasConcreteAdvice = (Array.isArray(report.suggestions) && report.suggestions.length >= 3 || Array.isArray(report.stageAdvice) && report.stageAdvice.length >= 3) && /\u786e\u8ba4|\u6c9f\u901a|\u8bb0\u5f55|\u590d\u76d8|\u5217\u51fa|\u51c6\u5907|\u89c2\u5bdf|\u8c03\u6574|\u8865\u5145|\u9a8c\u8bc1|\u5b89\u6392|\u907f\u514d|\u6301\u7eed/.test(adviceText);
+  const hasSafetyBoundary = /\u4e0d\u66ff\u4ee3|\u53c2\u8003|\u533b\u7597|\u6cd5\u5f8b|\u6295\u8d44|\u5a5a\u59fb|\u5fc3\u7406|\u8fb9\u754c|\u552f\u4e00\u4f9d\u636e|\u4e13\u4e1a/.test(text) || Boolean(report.oracle?.caution) || (Array.isArray(report.limits) && report.limits.length > 0);
+  const summaryLength = String(report.summary || "").trim().length;
+  const genericSignals = [/\u6b64\u95ee\u4e0d\u5b9c\u65ad\u6210\u5355\u7eaf\u5409\u51f6/, /\u6838\u5fc3\u5361\u70b9\u5728/, /\u5148\u628a\u95ee\u9898\u95ee\u6e05\u695a/, /\u6574\u4f53\u503e\u5411\u4e0d\u662f\u4e00\u9524\u5b9a\u97f3/].filter((pattern) => pattern.test(text)).length;
+  const lowTemplateRisk = summaryLength >= 40 && !(genericSignals >= 2 && !hasMethodTerms);
+  let score = 0;
+  if (generatedByAi) score += 25;
+  if (hasMethodTerms) score += 25;
+  if (hasConcreteAdvice) score += 25;
+  if (hasSafetyBoundary) score += 15;
+  if (lowTemplateRisk) score += 10;
+  const checks = { generatedByAi, hasMethodTerms, hasConcreteAdvice, hasSafetyBoundary, lowTemplateRisk };
+  const reasons = [];
+  if (!generatedByAi) reasons.push("\u672a\u68c0\u6d4b\u5230\u6a21\u578b\u751f\u6210\u6807\u8bb0\uff0c\u53ef\u80fd\u4ecd\u4e3a\u89c4\u5219\u515c\u5e95\u62a5\u544a\u3002");
+  if (!hasMethodTerms) reasons.push("\u672f\u6570\u4e13\u7528\u672f\u8bed\u4e0d\u8db3\uff0c\u5bb9\u6613\u663e\u5f97\u6cdb\u6cdb\u800c\u8c08\u3002");
+  if (!hasConcreteAdvice) reasons.push("\u73b0\u5b9e\u884c\u52a8\u5efa\u8bae\u4e0d\u8db3\uff0c\u7528\u6237\u8bfb\u5b8c\u540e\u53ef\u80fd\u4e0d\u77e5\u9053\u4e0b\u4e00\u6b65\u600e\u4e48\u505a\u3002");
+  if (!hasSafetyBoundary) reasons.push("\u7f3a\u5c11\u8fb9\u754c\u63d0\u793a\uff0c\u9700\u8865\u5145\u6587\u5316\u53c2\u8003\u4e0e\u975e\u4e13\u4e1a\u5efa\u8bae\u58f0\u660e\u3002");
+  if (!lowTemplateRisk) reasons.push("\u5957\u8bdd\u98ce\u9669\u504f\u9ad8\uff0c\u5efa\u8bae\u4eba\u5de5\u590d\u6838\u6458\u8981\u548c\u63a8\u6f14\u6bb5\u843d\u3002");
+  const labels = [];
+  if (generatedByAi) labels.push("\u6a21\u578b\u751f\u6210"); else labels.push("\u89c4\u5219\u515c\u5e95");
+  if (hasMethodTerms) labels.push("\u672f\u8bed\u8fbe\u6807");
+  if (hasConcreteAdvice) labels.push("\u5efa\u8bae\u5177\u4f53");
+  if (hasSafetyBoundary) labels.push("\u8fb9\u754c\u5b8c\u6574");
+  if (!lowTemplateRisk) labels.push("\u5957\u8bdd\u98ce\u9669");
+  return { score, level: score >= 80 ? "pass" : score >= 60 ? "watch" : "review", labels, checks, reasons };
+}
+
 function formatReportRecord(item) {
   let report = {};
   try { report = JSON.parse(item.report_json || "{}"); } catch {}
-  return { id: item.id, createdAt: item.created_at, methodName: item.method_name, question: item.question, title: report.title, summary: report.summary, adminReview: report.adminReview || null };
+  return { id: item.id, createdAt: item.created_at, methodName: item.method_name, question: item.question, title: report.title, summary: report.summary, adminReview: report.adminReview || null, qualityReview: report.qualityReview || scoreReportQuality(report) };
 }
 
 function formatOrderRecord(item) {
@@ -629,6 +691,7 @@ async function createReport(request, env) {
   } catch (error) {
     report = { ...report, generatedBy: "rules", aiError: String(error?.message || "AI_GENERATION_FALLBACK").slice(0, 180) };
   }
+  report = { ...report, methodId: method.id, qualityReview: scoreReportQuality({ ...report, methodId: method.id }) };
   if (creditCost > 0 && report.generatedBy !== "deepseek") {
     return sendJson({ ok: false, code: "PAID_REPORT_AI_UNAVAILABLE", message: "深度生成服务暂时不可用，本次未扣次数。请稍后重试，或先生成免费简版。", aiError: report.aiError || "AI_GENERATION_FALLBACK" }, 503);
   }

@@ -10,6 +10,12 @@ const REVIEW_LABELS = {
   hidden: "已隐藏",
 };
 
+const QUALITY_LABELS = {
+  pass: "\u8d28\u91cf\u901a\u8fc7",
+  watch: "\u89c2\u5bdf",
+  review: "\u9700\u590d\u6838",
+};
+
 export function AdminPage({ session, setRoute }) {
   const [overview, setOverview] = useState(null);
   const [notice, setNotice] = useState("");
@@ -198,9 +204,28 @@ export function AdminPage({ session, setRoute }) {
           <div className="section-title compact"><span>最近报告</span><h2>报告审核</h2></div>
           {overview?.reports?.length ? overview.reports.map((item) => {
             const review = item.adminReview || { status: "pending" };
+            const quality = item.qualityReview || {};
+            const checks = quality.checks || {};
             return (
               <article className="record-row admin-record admin-record-stack" key={item.id}>
-                <div><strong>{item.methodName || item.method_name}</strong><p>{item.question}</p></div>
+                <div>
+                  <strong>{item.methodName || item.method_name}</strong>
+                  <p>{item.question}</p>
+                  <div className={`quality-review quality-level-${quality.level || "review"}`}>
+                    <div className="quality-review-head">
+                      <span>{"\u8d28\u91cf "}{quality.score ?? "--"}</span>
+                      <em>{QUALITY_LABELS[quality.level] || "\u5f85\u68c0\u6d4b"}</em>
+                    </div>
+                    <div className="quality-checks">
+                      <span className={checks.generatedByAi ? "on" : "off"}>{"\u6a21\u578b"}</span>
+                      <span className={checks.hasMethodTerms ? "on" : "off"}>{"\u672f\u8bed"}</span>
+                      <span className={checks.hasConcreteAdvice ? "on" : "off"}>{"\u5efa\u8bae"}</span>
+                      <span className={checks.hasSafetyBoundary ? "on" : "off"}>{"\u8fb9\u754c"}</span>
+                      <span className={checks.lowTemplateRisk ? "on" : "off"}>{"\u5957\u8bdd"}</span>
+                    </div>
+                    {quality.reasons?.length ? <small>{quality.reasons.slice(0, 2).join(" ")}</small> : null}
+                  </div>
+                </div>
                 <div className="admin-review-box">
                   <span className="admin-status-pill">{REVIEW_LABELS[review.status] || "待审核"}</span>
                   <input value={reportNotes[item.id] || review.note || ""} onChange={(event) => setReportNotes((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="审核备注" />

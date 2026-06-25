@@ -2263,3 +2263,62 @@ input:focus, textarea:focus, select:focus {
     grid-template-columns: 1fr;
   }
 }
+
+
+.quality-review {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid rgba(212, 175, 55, 0.16);
+  background: rgba(10, 8, 5, 0.28);
+}
+.quality-review-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  font-family: var(--font-ui);
+}
+.quality-review-head span {
+  color: var(--gold-2);
+  font-weight: 800;
+}
+.quality-review-head em {
+  color: var(--faint);
+  font-style: normal;
+  font-size: 12px;
+}
+.quality-level-pass .quality-review-head em { color: #d7f0b0; }
+.quality-level-watch .quality-review-head em { color: #f4d88c; }
+.quality-level-review .quality-review-head em { color: rgba(245, 202, 202, 0.9); }
+.quality-level-review { border-color: rgba(201, 65, 65, 0.32); }
+.quality-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.quality-checks span {
+  min-width: 44px;
+  padding: 5px 8px;
+  border: 1px solid rgba(212, 175, 55, 0.14);
+  color: var(--faint);
+  background: rgba(255, 255, 255, 0.03);
+  text-align: center;
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+.quality-checks span.on {
+  border-color: rgba(212, 175, 55, 0.34);
+  color: var(--gold-2);
+  background: rgba(212, 175, 55, 0.08);
+}
+.quality-checks span.off {
+  border-color: rgba(201, 65, 65, 0.22);
+  color: rgba(245, 202, 202, 0.78);
+}
+.quality-review small {
+  display: block;
+  margin-top: 10px;
+  color: var(--faint);
+  line-height: 1.6;
+}
