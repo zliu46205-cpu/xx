@@ -358,6 +358,7 @@ export function validateIntake(values) {
 export function buildReport(values, method) {
   const question = String(values.question || "").trim();
   const methodSystem = methodById(method?.id);
+  const methodName = resolveMethodName(method, methodSystem);
   const topic = detectTopic(values);
   const risk = riskCheck(topic, question);
   const intent = detectIntent(question);
