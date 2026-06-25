@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { fieldLabels, methods } from "../data/siteData";
 import { buildReport, reportToText, validateIntake } from "../utils/report";
 import { createReport, listReports } from "../utils/api";
@@ -439,52 +439,130 @@ export function ConsultPage({ selectedMethod, selectMethod, session, setRoute })
   );
 }
 
+const reportViews = {
+  bazi: { label: "八字命理", seal: "四柱", flow: ["命局前提", "日主月令", "十神结构", "财官印食", "阶段建议"], symbolLabels: ["主象", "转向", "承载分"], situationTitle: "命局前提", oracleTitle: "日主、月令与十神", inferenceTitle: "结构推演", adviceTitle: "事业与现实行动" },
+  ziwei: { label: "紫微斗数", seal: "十二宫", flow: ["命盘前提", "核心宫位", "三方四正", "四化格局", "阶段倾向"], symbolLabels: ["主宫", "对宫", "参考分"], situationTitle: "命盘前提", oracleTitle: "宫位与四化", inferenceTitle: "宫位联参", adviceTitle: "角色与关系建议" },
+  meihua: { label: "梅花易数", seal: "本互变", flow: ["所问之事", "起卦方式", "本互变", "体用生克", "动爻落地"], symbolLabels: ["本卦", "变卦", "趋势分"], situationTitle: "所问之事", oracleTitle: "本卦、互卦与变卦", inferenceTitle: "体用与动爻推演", adviceTitle: "观察点与行动建议" },
+  liuyao: { label: "六爻占断", seal: "世应用神", flow: ["问题定义", "卦象信息", "用神世应", "六亲六神", "动变应期"], symbolLabels: ["本卦", "变卦", "应事分"], situationTitle: "问题定义", oracleTitle: "用神、世应与动变", inferenceTitle: "六亲六神推演", adviceTitle: "应期参考与现实行动" },
+  coins: { label: "铜钱占卜", seal: "三钱六掷", flow: ["三钱起卦", "本卦变卦", "动爻位置", "卦辞象辞", "注意事项"], symbolLabels: ["本卦", "变卦", "趋势分"], situationTitle: "三钱起卦前提", oracleTitle: "卦辞与象辞", inferenceTitle: "动爻推演", adviceTitle: "建议事项" },
+  qimen: { label: "奇门遁甲", seal: "九宫八门", flow: ["用局前提", "用神定位", "九宫组合", "门星神", "策略方向"], symbolLabels: ["用神", "落宫", "策略分"], situationTitle: "用局前提", oracleTitle: "九宫、八门与九星", inferenceTitle: "时机方向策略", adviceTitle: "谈判与行动建议" },
+  fengshui: { label: "风水布局", seal: "形气动线", flow: ["空间概况", "明堂气口", "动线采光", "功能冲突", "调整建议"], symbolLabels: ["主象", "调整点", "舒适分"], situationTitle: "空间概况", oracleTitle: "明堂、气口与动线", inferenceTitle: "空间体验推演", adviceTitle: "低成本调整建议" },
+  zeday: { label: "择日择时", seal: "时令宜忌", flow: ["事项前提", "日期范围", "避冲条件", "可用窗口", "准备事项"], symbolLabels: ["时令", "窗口", "可用分"], situationTitle: "事项前提", oracleTitle: "时令、冲合与宜忌", inferenceTitle: "窗口推演", adviceTitle: "准备事项" },
+  naming: { label: "起名策划", seal: "音形义", flow: ["命名目标", "风格方向", "五行意象", "音形义", "推荐组合"], symbolLabels: ["主意象", "风格", "传播分"], situationTitle: "命名目标", oracleTitle: "五行意象与音形义", inferenceTitle: "名字气质推演", adviceTitle: "候选方向" },
+  integrated: { label: "综合咨询", seal: "归类取象", flow: ["问题整理", "适用方法", "象征主线", "现实翻译", "下一步行动"], symbolLabels: ["主象", "转向", "参考分"], situationTitle: "问题整理", oracleTitle: "象征主线", inferenceTitle: "综合推演", adviceTitle: "下一步行动" },
+};
+
+function getReportView(report) {
+  const text = [report?.method, report?.title].filter(Boolean).join(" ");
+  if (/八字|四柱|日主/.test(text)) return reportViews.bazi;
+  if (/紫微|斗数|命宫/.test(text)) return reportViews.ziwei;
+  if (/梅花/.test(text)) return reportViews.meihua;
+  if (/六爻/.test(text)) return reportViews.liuyao;
+  if (/铜钱|三钱/.test(text)) return reportViews.coins;
+  if (/奇门/.test(text)) return reportViews.qimen;
+  if (/风水|阳宅|布局/.test(text)) return reportViews.fengshui;
+  if (/择日|择时/.test(text)) return reportViews.zeday;
+  if (/起名|命名/.test(text)) return reportViews.naming;
+  return reportViews.integrated;
+}
+
+function normalizeGlossary(items = []) {
+  return items.map((item) => {
+    if (Array.isArray(item)) return { term: item[0], desc: item[1] };
+    if (item && typeof item === "object") return { term: item.term || item.value?.[0], desc: item.desc || item.description || item.value?.[1] };
+    return { term: String(item), desc: "" };
+  }).filter((item) => item.term);
+}
+
+function safeList(value) {
+  return Array.isArray(value) ? value.filter(Boolean) : [];
+}
 function ReportPanel({ report, copySummary, exportText, regenerate }) {
+  const view = getReportView(report);
+  const glossary = normalizeGlossary(report.termGlossary);
+  const basis = safeList(report.basis);
+  const inference = safeList(report.inference);
+  const suggestions = safeList(report.suggestions);
+  const limits = safeList(report.limits);
+  const oracle = report.oracle || {};
+
   return (
-    <article className="report-panel layered-report">
+    <article className="report-panel layered-report method-report-panel">
       <div className="report-main">
-        <header>
-          <span>{report.id}</span>
-          <small className="report-tier-badge">{report.reportTierName || "免费简版"}</small>
-          <h2>{report.title}</h2>
-          <p>{report.createdAt}</p>
+        <header className="method-report-head">
+          <div>
+            <span>{report.id}</span>
+            <small className="report-tier-badge">{report.reportTierName || "免费简版"}</small>
+            <h2>{report.title}</h2>
+            <p>{report.createdAt}</p>
+          </div>
+          <strong>{view.seal}</strong>
         </header>
+
+        <nav className="method-flow" aria-label="报告结构">
+          {view.flow.map((item, index) => (
+            <span key={item}><b>{String(index + 1).padStart(2, "0")}</b>{item}</span>
+          ))}
+        </nav>
 
         <section className="report-section lead-reading">
           <h3>一句话总断</h3>
           <p>{report.summary}</p>
         </section>
 
-        <section className="oracle-grid">
-          <div><span>主象</span><strong>{report.oracle.mainHexagram}</strong></div>
-          <div><span>变象</span><strong>{report.oracle.changedHexagram}</strong></div>
-          <div><span>趋势评分</span><strong>{report.oracle.score}</strong></div>
+        <section className="oracle-grid method-oracle-grid">
+          <div><span>{view.symbolLabels[0]}</span><strong>{oracle.mainHexagram || "待定"}</strong></div>
+          <div><span>{view.symbolLabels[1]}</span><strong>{oracle.changedHexagram || "待定"}</strong></div>
+          <div><span>{view.symbolLabels[2]}</span><strong>{oracle.score ?? "-"}</strong></div>
         </section>
 
         <section className="report-section">
-          <h3>当前局势</h3>
+          <h3>{view.situationTitle}</h3>
           <p>{report.situation}</p>
         </section>
 
-        <section className="report-section">
-          <h3>{report.oracle.firstTitle || "术数依据"}</h3>
-          <p>{report.oracle.guaci}</p>
-          <h3>{report.oracle.secondTitle || "象意推演"}</h3>
-          <p>{report.oracle.xiangci}</p>
-          <h3>白话解释</h3>
-          <p>{report.oracle.plainText}</p>
-          <h3>未来倾向</h3>
-          <p>{report.tendency}</p>
+        <section className="method-analysis-grid">
+          <article>
+            <span>一</span>
+            <h3>{view.oracleTitle}</h3>
+            <p>{oracle.guaci}</p>
+            <p>{oracle.xiangci}</p>
+          </article>
+          <article>
+            <span>二</span>
+            <h3>白话解释</h3>
+            <p>{oracle.plainText}</p>
+          </article>
+          <article>
+            <span>三</span>
+            <h3>未来倾向</h3>
+            <p>{report.tendency}</p>
+          </article>
+        </section>
+
+        <section className="method-report-blocks">
+          <div className="method-block-title">
+            <span>{view.label}</span>
+            <h3>{view.inferenceTitle}</h3>
+          </div>
+          <div>
+            {inference.map((item, index) => (
+              <article key={item}>
+                <b>{String(index + 1).padStart(2, "0")}</b>
+                <p>{item}</p>
+              </article>
+            ))}
+          </div>
         </section>
 
         <section className="report-columns">
           <div>
             <h3>分析依据</h3>
-            <ul>{report.basis.map((item) => <li key={item}>{item}</li>)}</ul>
+            <ul>{basis.map((item) => <li key={item}>{item}</li>)}</ul>
           </div>
           <div>
-            <h3>象征推演</h3>
-            <ul>{report.inference.map((item) => <li key={item}>{item}</li>)}</ul>
+            <h3>{view.adviceTitle}</h3>
+            <ul>{suggestions.map((item) => <li key={item}>{item}</li>)}</ul>
           </div>
         </section>
 
@@ -503,21 +581,22 @@ function ReportPanel({ report, copySummary, exportText, regenerate }) {
             </div>
           </section>
         ) : null}
+
         <section className="report-columns">
           <div>
-            <h3>行动建议</h3>
-            <ul>{report.suggestions.map((item) => <li key={item}>{item}</li>)}</ul>
+            <h3>相似案例</h3>
+            <p>{oracle.similarCase}</p>
           </div>
           <div>
-            <h3>相似案例</h3>
-            <p>{report.oracle.similarCase}</p>
+            <h3>注意事项</h3>
+            <p>{oracle.caution}</p>
           </div>
         </section>
 
-        <section className="term-panel">
-          <span>术语解释</span>
+        <section className="term-panel method-term-panel">
+          <span>{view.label}术语解释</span>
           <div>
-            {report.termGlossary.map(([term, desc]) => (
+            {glossary.map(({ term, desc }) => (
               <article key={term}>
                 <strong>{term}</strong>
                 <p>{desc}</p>
@@ -533,14 +612,13 @@ function ReportPanel({ report, copySummary, exportText, regenerate }) {
         </footer>
       </div>
 
-      <aside className="report-side-note">
+      <aside className="report-side-note method-report-index">
+        <span>报告目录</span>
+        {view.flow.map((item) => <small key={item}>{item}</small>)}
         <span>阅读说明</span>
-        <small>{report.oracle.caution}</small>
-        {report.limits.map((item) => (
-          <small key={item}>{item}</small>
-        ))}
+        <small>{oracle.caution}</small>
+        {limits.map((item) => <small key={item}>{item}</small>)}
       </aside>
     </article>
   );
 }
-
