@@ -9,7 +9,7 @@ const jsonHeaders = {
 
 const API_VERSION = "deepseek-json-v5";
 
-const PAYMENT_PROVIDERS = new Set(["manual", "generic_hmac", "wechat", "alipay", "stripe"]);
+const PAYMENT_PROVIDERS = new Set(["wechat", "alipay"]);
 
 const PLANS = {
   free: { name: "免费试测", amount: 0, credits: 1, type: "free" },
@@ -417,8 +417,8 @@ function centsToYuan(amount) {
 }
 
 function normalizePaymentProvider(value) {
-  const provider = String(value || "manual").trim().toLowerCase();
-  return PAYMENT_PROVIDERS.has(provider) ? provider : "manual";
+  const provider = String(value || "wechat").trim().toLowerCase();
+  return PAYMENT_PROVIDERS.has(provider) ? provider : "wechat";
 }
 
 function getClientIp(request) {
@@ -440,25 +440,19 @@ async function paymentSignature(secret, payload) {
 function buildPaymentInstructions(order, provider, env) {
   const amountText = `\u00a5${centsToYuan(order.amount)}`;
   const receiverName = String(env.PAYMENT_RECEIVER_NAME || "").trim();
-  const wechatQrUrl = String(env.PAYMENT_WECHAT_QR_URL || "").trim();
-  const alipayQrUrl = String(env.PAYMENT_ALIPAY_QR_URL || "").trim();
-  const bankName = String(env.PAYMENT_BANK_NAME || "").trim();
-  const bankAccount = String(env.PAYMENT_BANK_ACCOUNT || "").trim();
-  const bankAccountName = String(env.PAYMENT_BANK_ACCOUNT_NAME || receiverName || "").trim();
+  const wechatQrUrl = String(env.PAYMENT_WECHAT_QR_URL || "/assets/pay-wechat.jpg").trim();
+  const alipayQrUrl = String(env.PAYMENT_ALIPAY_QR_URL || "/assets/pay-alipay.jpg").trim();
   const extraNote = String(env.PAYMENT_MANUAL_NOTE || "").trim();
   return {
-    type: "manual_qr",
+    type: "wechat_alipay_qr",
     provider,
     amountText,
     receiverName,
     wechatQrUrl,
     alipayQrUrl,
-    bankName,
-    bankAccount,
-    bankAccountName,
     transferNote: `ORDER:${order.id}`,
     notice: extraNote || "\u4ed8\u6b3e\u65f6\u8bf7\u5907\u6ce8\u8ba2\u5355\u53f7\uff0c\u4ed8\u6b3e\u5b8c\u6210\u540e\u7b49\u5f85\u7ba1\u7406\u5458\u786e\u8ba4\u5230\u8d26\u5e76\u53d1\u653e\u6b21\u6570\u3002",
-    configured: Boolean(wechatQrUrl || alipayQrUrl || bankAccount || extraNote),
+    configured: Boolean(wechatQrUrl || alipayQrUrl || extraNote),
   };
 }
 
@@ -678,7 +672,7 @@ function formatReportRecord(item) {
 }
 
 function formatOrderRecord(item) {
-  return { id: item.id, userId: item.user_id, createdAt: item.created_at, paidAt: item.paid_at, planId: item.plan_id, planName: item.plan_name, amount: item.amount, amountText: `¥${centsToYuan(item.amount)}`, status: item.status, provider: item.provider || "manual" };
+  return { id: item.id, userId: item.user_id, createdAt: item.created_at, paidAt: item.paid_at, planId: item.plan_id, planName: item.plan_name, amount: item.amount, amountText: `¥${centsToYuan(item.amount)}`, status: item.status, provider: item.provider || "wechat" };
 }
 
 function formatUserRecord(item) {
@@ -777,7 +771,7 @@ async function createOrder(request, env) {
   const planId = String(body.planId || "");
   const plan = PLANS[planId];
   if (!plan) return sendJson({ ok: false, message: "套餐不存在。" }, 404);
-  const provider = normalizePaymentProvider(body.provider || env.DEFAULT_PAYMENT_PROVIDER || "manual");
+  const provider = normalizePaymentProvider(body.provider || env.DEFAULT_PAYMENT_PROVIDER || "wechat");
   const now = new Date().toISOString();
   const id = makeId("order");
   const status = plan.amount === 0 ? "paid" : "pending";

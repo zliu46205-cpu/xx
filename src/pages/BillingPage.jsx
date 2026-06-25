@@ -1,22 +1,64 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { Button, Notice } from "../components/Primitives";
 import { PageHeader } from "../components/Layout";
 import { createOrder, getAccount, getOrderDetail } from "../utils/api";
 
 export const plans = [
-  { id: "free", name: "免费体验", price: 0, unit: "每日 1 次", credits: 1, badge: "入门", desc: "适合先体验问题归类、主象提示、简版建议和边界提醒。", features: ["简版报告", "基础术数选择", "可复制摘要"] },
-  { id: "single", name: "标准/深度体验包", price: 1990, unit: "3 次", credits: 3, badge: "主推", desc: "适合一个明确问题，可生成 3 次标准报告或 1 次深度报告。", features: ["3 次标准报告", "或 1 次深度报告", "术语解释", "TXT 导出"] },
-  { id: "monthly", name: "月度会员", price: 9900, unit: "30 天", credits: 30, badge: "复购", desc: "适合持续测算、保存报告和多主题比较。", features: ["30 次完整报告", "历史记录", "优先生成", "会员标识"] },
-  { id: "yearly", name: "年度会员", price: 39900, unit: "365 天", credits: 420, badge: "高价值", desc: "适合长期使用，后续可接年度流年和专题权益。", features: ["420 次完整报告", "年度规划", "专题折扣", "数据存档"] },
-  { id: "review", name: "人工复核预约", price: 29900, unit: "每次", credits: 0, badge: "服务层", desc: "后续接入人工服务，不做恐吓式消灾收费。", features: ["人工校对", "补充追问", "报告修订", "预约制"] },
+  {
+    id: "free",
+    name: "免费体验",
+    price: 0,
+    unit: "每日 1 次",
+    credits: 1,
+    badge: "入门",
+    desc: "适合先体验问题归类、主象提示、简版建议和边界提醒。",
+    features: ["简版报告", "基础术数选择", "可复制摘要"],
+  },
+  {
+    id: "single",
+    name: "标准/深度体验包",
+    price: 1990,
+    unit: "3 次",
+    credits: 3,
+    badge: "主推",
+    desc: "适合一个明确问题，可生成 3 次标准报告或 1 次深度报告。",
+    features: ["3 次标准报告", "或 1 次深度报告", "术语解释", "TXT 导出"],
+  },
+  {
+    id: "monthly",
+    name: "月度会员",
+    price: 9900,
+    unit: "30 天",
+    credits: 30,
+    badge: "复购",
+    desc: "适合持续测算、保存报告和多主题比较。",
+    features: ["30 次完整报告", "历史记录", "优先生成", "会员标识"],
+  },
+  {
+    id: "yearly",
+    name: "年度会员",
+    price: 39900,
+    unit: "365 天",
+    credits: 420,
+    badge: "高价值",
+    desc: "适合长期使用，后续可接年度流年和专题权益。",
+    features: ["420 次完整报告", "年度规划", "专题折扣", "数据存档"],
+  },
+  {
+    id: "review",
+    name: "人工复核预约",
+    price: 29900,
+    unit: "每次",
+    credits: 0,
+    badge: "服务层",
+    desc: "后续接入人工服务，不做恐吓式消灾收费。",
+    features: ["人工校对", "补充追问", "报告修订", "预约制"],
+  },
 ];
 
 const paymentProviders = [
-  { id: "generic_hmac", label: "通用 HMAC 网关" },
   { id: "wechat", label: "微信支付" },
   { id: "alipay", label: "支付宝" },
-  { id: "stripe", label: "Stripe" },
-  { id: "manual", label: "人工确认" },
 ];
 
 function formatCredits(account) {
@@ -27,18 +69,33 @@ function formatPrice(price) {
   return price ? `¥${(price / 100).toFixed(2)}` : "¥0";
 }
 
+function statusText(status) {
+  if (status === "paid") return "已支付，权益已发放";
+  if (status === "pending") return "待支付";
+  if (status === "cancelled") return "已取消";
+  return status || "未创建";
+}
+
 export function BillingPage({ session, setRoute }) {
   const [selected, setSelected] = useState("single");
   const [notice, setNotice] = useState("");
   const [order, setOrder] = useState(null);
   const [account, setAccount] = useState(null);
   const [status, setStatus] = useState("idle");
-  const [paymentProvider, setPaymentProvider] = useState("generic_hmac");
+  const [paymentProvider, setPaymentProvider] = useState("wechat");
 
   useEffect(() => {
     if (!session) return;
     getAccount(session).then(setAccount).catch(() => null);
   }, [session]);
+
+  useEffect(() => {
+    if (!order || !session || order.status === "paid") return undefined;
+    const timer = window.setInterval(() => {
+      refreshOrder("", { silent: true });
+    }, 8000);
+    return () => window.clearInterval(timer);
+  }, [order?.id, order?.status, session?.token]);
 
   async function refreshAccount(message) {
     if (!session) return null;
@@ -50,7 +107,7 @@ export function BillingPage({ session, setRoute }) {
 
   async function buy(planId) {
     if (!session) {
-      setNotice("请先登录后再创建订单。游客可以继续免费体验，但订单需要账号保存。");
+      setNotice("请先登录后再创建订单。订单和权益需要绑定到你的账号。");
       setRoute("login");
       return;
     }
@@ -59,8 +116,7 @@ export function BillingPage({ session, setRoute }) {
     try {
       const payload = await createOrder(planId, session, paymentProvider);
       setOrder(payload.order);
-      if (payload.order?.checkoutUrl) window.open(payload.order.checkoutUrl, "_blank", "noopener,noreferrer");
-      await refreshAccount(payload.order?.checkoutUrl ? "订单已创建，已打开支付收银台。" : "订单已创建。当前通道没有配置收银台 URL，可用模拟支付或后台确认。 ");
+      await refreshAccount("订单已创建。请使用微信或支付宝扫码付款，到账后系统会自动发放权益。");
     } catch (error) {
       setNotice(error.message || "订单创建失败");
     } finally {
@@ -68,24 +124,24 @@ export function BillingPage({ session, setRoute }) {
     }
   }
 
-  async function refreshOrder(message) {
+  async function refreshOrder(message, options = {}) {
     if (!order || !session) return null;
-    setStatus("loading");
+    if (!options.silent) setStatus("loading");
     try {
       const payload = await getOrderDetail(order.id, session);
       setOrder(payload.order);
       const nextAccount = await refreshAccount();
       if (payload.order.status === "paid") {
-        setNotice(`订单已支付，权益已同步。当前剩余 ${formatCredits(nextAccount)} 次。`);
+        setNotice(`支付已确认，权益已发放。当前剩余 ${formatCredits(nextAccount)} 次。`);
       } else if (message) {
         setNotice(message);
       }
       return payload.order;
     } catch (error) {
-      setNotice(error.message || "订单状态查询失败。");
+      if (!options.silent) setNotice(error.message || "订单状态查询失败。");
       return null;
     } finally {
-      setStatus("idle");
+      if (!options.silent) setStatus("idle");
     }
   }
 
@@ -93,32 +149,51 @@ export function BillingPage({ session, setRoute }) {
     if (!order) return;
     const pay = order.paymentInstructions || {};
     const lines = [
-      "\u8ba2\u5355\u53f7\uff1a" + order.id,
-      "\u91d1\u989d\uff1a" + (order.amountText || formatPrice(order.amount)),
-      pay.receiverName ? "\u6536\u6b3e\u4eba\uff1a" + pay.receiverName : "",
-      pay.bankName ? "\u94f6\u884c\uff1a" + pay.bankName : "",
-      pay.bankAccount ? "\u8d26\u53f7\uff1a" + pay.bankAccount : "",
-      pay.bankAccountName ? "\u6237\u540d\uff1a" + pay.bankAccountName : "",
-      "\u4ed8\u6b3e\u5907\u6ce8\uff1a" + (pay.transferNote || ("ORDER:" + order.id)),
+      `订单号：${order.id}`,
+      `金额：${order.amountText || formatPrice(order.amount)}`,
+      pay.receiverName ? `收款人：${pay.receiverName}` : "",
+      `付款备注：${pay.transferNote || `ORDER:${order.id}`}`,
+      "付款方式：微信或支付宝扫码付款",
     ].filter(Boolean).join("\n");
     await navigator.clipboard?.writeText(lines);
-    setNotice("\u4ed8\u6b3e\u4fe1\u606f\u5df2\u590d\u5236\u3002\u4ed8\u6b3e\u65f6\u52a1\u5fc5\u5907\u6ce8\u8ba2\u5355\u53f7\uff0c\u65b9\u4fbf\u540e\u53f0\u786e\u8ba4\u5230\u8d26\u3002");
+    setNotice("付款信息已复制。付款时建议备注订单号，便于核对。");
   }
-
 
   const credits = formatCredits(account);
   const membership = account?.membership;
   const selectedPlan = plans.find((plan) => plan.id === selected) || plans[1];
+  const pay = order?.paymentInstructions || {};
+  const currentQr = paymentProvider === "wechat" ? pay.wechatQrUrl : pay.alipayQrUrl;
 
   return (
     <>
-      <PageHeader eyebrow="会员与支付" title="免费体验建立信任，付费服务按价值分层" desc="这里已经具备套餐、订单、支付通道、支付回调、权益发放和状态查询骨架。正式上线时，把收银台地址与支付平台回调接上即可。" />
+      <PageHeader
+        eyebrow="会员与支付"
+        title="微信 / 支付宝扫码付款，到账后发放权益"
+        desc="当前只支持微信与支付宝。若接入微信支付或支付宝商户回调，系统会在收到平台通知后自动确认订单并发放次数或会员权益。"
+      />
 
       <section className="billing-status-strip">
-        <article><span>当前账户</span><strong>{session ? session.email || session.name : "未登录"}</strong><p>{session ? "订单和次数会保存到当前账号。" : "登录后才能购买套餐。"}</p></article>
-        <article><span>剩余次数</span><strong>{session ? credits : "--"}</strong><p>标准报告扣 1 次，深度报告扣 3 次。</p></article>
-        <article><span>会员状态</span><strong>{membership ? membership.plan_name || membership.planName : "未开通"}</strong><p>{membership?.end_at || membership?.endAt ? `到期：${membership.end_at || membership.endAt}` : "会员套餐会在支付成功后显示。"}</p></article>
-        <article><span>当前选择</span><strong>{selectedPlan.name}</strong><p>{selectedPlan.desc}</p></article>
+        <article>
+          <span>当前账号</span>
+          <strong>{session ? session.email || session.name : "未登录"}</strong>
+          <p>{session ? "订单和次数会保存到当前账号。" : "登录后才能购买套餐。"}</p>
+        </article>
+        <article>
+          <span>剩余次数</span>
+          <strong>{session ? credits : "--"}</strong>
+          <p>标准报告扣 1 次，深度报告按后续规则扣减。</p>
+        </article>
+        <article>
+          <span>会员状态</span>
+          <strong>{membership ? membership.plan_name || membership.planName : "未开通"}</strong>
+          <p>{membership?.end_at || membership?.endAt ? `到期：${membership.end_at || membership.endAt}` : "支付成功后会显示会员权益。"}</p>
+        </article>
+        <article>
+          <span>当前选择</span>
+          <strong>{selectedPlan.name}</strong>
+          <p>{selectedPlan.desc}</p>
+        </article>
       </section>
 
       <section className="billing-grid">
@@ -129,16 +204,18 @@ export function BillingPage({ session, setRoute }) {
             <div className="service-price"><strong>{formatPrice(plan.price)}</strong><em>{plan.credits ? `${plan.credits} 次` : "预约制"}</em></div>
             <p>{plan.desc}</p>
             <ul>{plan.features.map((item) => <li key={item}>{item}</li>)}</ul>
-            <Button type="button" onClick={() => buy(plan.id)} disabled={status === "loading" || plan.id === "free"}>{plan.id === "free" ? "免费体验无需支付" : "创建订单"}</Button>
+            <Button type="button" onClick={() => buy(plan.id)} disabled={status === "loading" || plan.id === "free"}>
+              {plan.id === "free" ? "免费体验无需支付" : "创建支付订单"}
+            </Button>
           </article>
         ))}
       </section>
 
       <section className="payment-provider-panel">
         <div>
-          <span>支付通道</span>
-          <h2>选择收银台通道</h2>
-          <p>正式上线建议使用通用 HMAC 网关承接支付平台服务端通知，再由微信、支付宝或 Stripe 网关映射订单字段。</p>
+          <span>支付方式</span>
+          <h2>只支持微信与支付宝</h2>
+          <p>个人收款码无法向网站主动发送到账通知。若要真正自动检测到账，需要开通微信支付商户号、支付宝开放平台或聚合支付，并配置回调密钥。</p>
         </div>
         <select value={paymentProvider} onChange={(event) => setPaymentProvider(event.target.value)}>
           {paymentProviders.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}
@@ -147,44 +224,43 @@ export function BillingPage({ session, setRoute }) {
 
       <section className="checkout-panel checkout-panel-rich">
         <div className="checkout-main">
-          <span>{"\u8ba2\u5355\u72b6\u6001"}</span>
-          <h2>{order ? order.planName || order.plan_name : "\u5c1a\u672a\u521b\u5efa\u8ba2\u5355"}</h2>
-          <p>{order ? `????${order.id} ? ???${order.status} ? ???${order.amountText || formatPrice(order.amount)} ? ???${order.provider || "manual"}${order.checkoutUrl ? " ? ??????" : ""}` : "\u9009\u62e9\u5957\u9910\u540e\u4f1a\u751f\u6210\u8ba2\u5355\u3002\u5f53\u524d\u5148\u652f\u6301\u6536\u6b3e\u7801/\u8f6c\u8d26\u5f0f\u652f\u4ed8\uff0c\u7ba1\u7406\u5458\u786e\u8ba4\u5230\u8d26\u540e\u81ea\u52a8\u53d1\u653e\u6b21\u6570\u3002"}</p>
+          <span>订单状态</span>
+          <h2>{order ? order.planName || order.plan_name : "尚未创建订单"}</h2>
+          <p>
+            {order
+              ? `订单号 ${order.id} · ${statusText(order.status)} · 金额 ${order.amountText || formatPrice(order.amount)} · 通道 ${paymentProvider === "wechat" ? "微信支付" : "支付宝"}`
+              : "选择套餐后会生成订单。用户扫码付款后，系统会定时查询订单状态；正式商户回调配置完成后可自动发放权益。"}
+          </p>
           {order ? (
             <div className="payment-info-grid">
-              <article><b>{"\u5e94\u4ed8\u91d1\u989d"}</b><strong>{order.amountText || formatPrice(order.amount)}</strong></article>
-              <article><b>{"\u4ed8\u6b3e\u5907\u6ce8"}</b><strong>{order.paymentInstructions?.transferNote || `ORDER:${order.id}`}</strong></article>
-              <article><b>{"\u6536\u6b3e\u4eba"}</b><strong>{order.paymentInstructions?.receiverName || "\u5f85\u914d\u7f6e"}</strong></article>
-              <article><b>{"\u786e\u8ba4\u65b9\u5f0f"}</b><strong>{"\u540e\u53f0\u786e\u8ba4\u5230\u8d26"}</strong></article>
+              <article><b>应付金额</b><strong>{order.amountText || formatPrice(order.amount)}</strong></article>
+              <article><b>付款备注</b><strong>{pay.transferNote || `ORDER:${order.id}`}</strong></article>
+              <article><b>收款人</b><strong>{pay.receiverName || "待配置"}</strong></article>
+              <article><b>确认方式</b><strong>{order.status === "paid" ? "已自动/后台确认" : "等待到账确认"}</strong></article>
             </div>
           ) : null}
         </div>
+
         {order ? (
           <div className="payment-box">
-            <div className="payment-qr-grid">
-              <div>
-                <span>{"\u5fae\u4fe1\u6536\u6b3e"}</span>
-                {order.paymentInstructions?.wechatQrUrl ? <img src={order.paymentInstructions.wechatQrUrl} alt="\u5fae\u4fe1\u6536\u6b3e\u7801" /> : <em>{"\u672a\u914d\u7f6e"}</em>}
-              </div>
-              <div>
-                <span>{"\u652f\u4ed8\u5b9d\u6536\u6b3e"}</span>
-                {order.paymentInstructions?.alipayQrUrl ? <img src={order.paymentInstructions.alipayQrUrl} alt="\u652f\u4ed8\u5b9d\u6536\u6b3e\u7801" /> : <em>{"\u672a\u914d\u7f6e"}</em>}
-              </div>
+            <div className="payment-method-tabs">
+              <button type="button" className={paymentProvider === "wechat" ? "active" : ""} onClick={() => setPaymentProvider("wechat")}>微信支付</button>
+              <button type="button" className={paymentProvider === "alipay" ? "active" : ""} onClick={() => setPaymentProvider("alipay")}>支付宝</button>
             </div>
-            <div className="payment-bank-info">
-              <span>{"\u94f6\u884c\u6216\u8f6c\u8d26\u4fe1\u606f"}</span>
-              <p>{order.paymentInstructions?.bankName || "\u672a\u914d\u7f6e\u94f6\u884c\u540d\u79f0"} ? {order.paymentInstructions?.bankAccount || "\u672a\u914d\u7f6e\u8d26\u53f7"} ? {order.paymentInstructions?.bankAccountName || "\u672a\u914d\u7f6e\u6237\u540d"}</p>
-              <small>{order.paymentInstructions?.notice || "\u4ed8\u6b3e\u5b8c\u6210\u540e\u7b49\u5f85\u7ba1\u7406\u5458\u786e\u8ba4\u5230\u8d26\u5e76\u53d1\u653e\u6b21\u6570\u3002"}</small>
-              {!order.paymentInstructions?.configured ? <small className="payment-warning">{"\u5c1a\u672a\u914d\u7f6e\u6536\u6b3e\u7801\u6216\u6536\u6b3e\u8bf4\u660e\uff0c\u8bf7\u5728 Cloudflare \u53d8\u91cf\u4e2d\u586b\u5199 PAYMENT_WECHAT_QR_URL / PAYMENT_ALIPAY_QR_URL \u7b49\u4fe1\u606f\u3002"}</small> : null}
+            <div className={`payment-qr-single ${paymentProvider}`}>
+              <span>{paymentProvider === "wechat" ? "微信扫码付款" : "支付宝扫码付款"}</span>
+              {currentQr ? <img src={currentQr} alt={paymentProvider === "wechat" ? "微信收款码" : "支付宝收款码"} /> : <em>尚未配置收款码</em>}
+              <p>{pay.notice || "付款后请保留截图。开通正式商户回调后，系统会自动确认到账并发放权益。"}</p>
+              {!pay.configured ? <small className="payment-warning">请在 Cloudflare 变量中配置 PAYMENT_WECHAT_QR_URL / PAYMENT_ALIPAY_QR_URL，或使用项目内默认收款码。</small> : null}
             </div>
           </div>
         ) : null}
+
         <div className="form-actions checkout-actions">
-          {order?.checkoutUrl ? <Button type="button" onClick={() => window.open(order.checkoutUrl, "_blank", "noopener,noreferrer")}>{"\u6253\u5f00\u6536\u94f6\u53f0"}</Button> : null}
-          <Button type="button" variant="secondary" onClick={copyPaymentInfo} disabled={!order}>{"\u590d\u5236\u4ed8\u6b3e\u4fe1\u606f"}</Button>
-          <Button type="button" variant="ghost" onClick={() => refreshOrder("\u8ba2\u5355\u72b6\u6001\u5df2\u5237\u65b0\u3002")} disabled={!order || status === "loading"}>{"\u67e5\u8be2\u5230\u8d26\u7ed3\u679c"}</Button>
-          <Button type="button" variant="ghost" onClick={() => refreshAccount("\u8d26\u6237\u72b6\u6001\u5df2\u5237\u65b0\u3002")} disabled={!session || status === "loading"}>{"\u5237\u65b0\u6743\u76ca"}</Button>
-          <Button type="button" variant="ghost" onClick={() => setRoute("account")}>{"\u67e5\u770b\u7528\u6237\u4e2d\u5fc3"}</Button>
+          <Button type="button" variant="secondary" onClick={copyPaymentInfo} disabled={!order}>复制付款信息</Button>
+          <Button type="button" variant="ghost" onClick={() => refreshOrder("订单状态已刷新。")} disabled={!order || status === "loading"}>刷新到账状态</Button>
+          <Button type="button" variant="ghost" onClick={() => refreshAccount("账户状态已刷新。")} disabled={!session || status === "loading"}>刷新权益</Button>
+          <Button type="button" variant="ghost" onClick={() => setRoute("account")}>查看用户中心</Button>
         </div>
       </section>
       <Notice>{notice}</Notice>

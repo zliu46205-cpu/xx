@@ -413,32 +413,26 @@ function userRow(row) {
   return { id: row.id, createdAt: row.createdAt, email: row.email, name: row.name, role: row.role, status: row.status, credits: row.credits || 0 };
 }
 
-function buildPaymentInstructions(order, provider = "manual") {
+function buildPaymentInstructions(order, provider = "wechat") {
   const receiverName = String(process.env.PAYMENT_RECEIVER_NAME || "").trim();
-  const wechatQrUrl = String(process.env.PAYMENT_WECHAT_QR_URL || "").trim();
-  const alipayQrUrl = String(process.env.PAYMENT_ALIPAY_QR_URL || "").trim();
-  const bankName = String(process.env.PAYMENT_BANK_NAME || "").trim();
-  const bankAccount = String(process.env.PAYMENT_BANK_ACCOUNT || "").trim();
-  const bankAccountName = String(process.env.PAYMENT_BANK_ACCOUNT_NAME || receiverName || "").trim();
+  const wechatQrUrl = String(process.env.PAYMENT_WECHAT_QR_URL || "/assets/pay-wechat.jpg").trim();
+  const alipayQrUrl = String(process.env.PAYMENT_ALIPAY_QR_URL || "/assets/pay-alipay.jpg").trim();
   const extraNote = String(process.env.PAYMENT_MANUAL_NOTE || "").trim();
   return {
-    type: "manual_qr",
+    type: "wechat_alipay_qr",
     provider,
     amountText: `\u00a5${cents(order.amount)}`,
     receiverName,
     wechatQrUrl,
     alipayQrUrl,
-    bankName,
-    bankAccount,
-    bankAccountName,
     transferNote: `ORDER:${order.id}`,
     notice: extraNote || "\u4ed8\u6b3e\u65f6\u8bf7\u5907\u6ce8\u8ba2\u5355\u53f7\uff0c\u4ed8\u6b3e\u5b8c\u6210\u540e\u7b49\u5f85\u7ba1\u7406\u5458\u786e\u8ba4\u5230\u8d26\u5e76\u53d1\u653e\u6b21\u6570\u3002",
-    configured: Boolean(wechatQrUrl || alipayQrUrl || bankAccount || extraNote),
+    configured: Boolean(wechatQrUrl || alipayQrUrl || extraNote),
   };
 }
 
 function orderRow(row) {
-  return { id: row.id, userId: row.userId, createdAt: row.createdAt, paidAt: row.paidAt, planId: row.planId, planName: row.planName, amount: row.amount, amountText: `¥${cents(row.amount)}`, status: row.status, provider: row.provider || "manual" };
+  return { id: row.id, userId: row.userId, createdAt: row.createdAt, paidAt: row.paidAt, planId: row.planId, planName: row.planName, amount: row.amount, amountText: `¥${cents(row.amount)}`, status: row.status, provider: row.provider || "wechat" };
 }
 
 async function register(req, res) {
@@ -590,7 +584,7 @@ async function createOrder(req, res) {
   const plan = PLANS[String(body.planId || "")];
   if (!plan) return sendJson(res, 404, { ok: false, message: "套餐不存在。" });
   const now = new Date().toISOString();
-  const order = { id: id("order"), createdAt: now, updatedAt: now, userId: session.userId, planId: body.planId, planName: plan.name, amount: plan.amount, currency: "CNY", status: plan.amount === 0 ? "paid" : "pending", provider: "manual" };
+  const order = { id: id("order"), createdAt: now, updatedAt: now, userId: session.userId, planId: body.planId, planName: plan.name, amount: plan.amount, currency: "CNY", status: plan.amount === 0 ? "paid" : "pending", provider: String(body.provider || process.env.DEFAULT_PAYMENT_PROVIDER || "wechat").toLowerCase() === "alipay" ? "alipay" : "wechat" };
   const orders = await readList(files.orders);
   orders.unshift(order);
   await saveList(files.orders, orders);

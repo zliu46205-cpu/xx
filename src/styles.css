@@ -2421,3 +2421,57 @@ input:focus, textarea:focus, select:focus {
     grid-template-columns: 1fr;
   }
 }
+
+.payment-method-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.payment-method-tabs button {
+  min-height: 42px;
+  border: 1px solid rgba(212, 175, 55, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--faint);
+  font-family: var(--font-ui);
+  font-weight: 900;
+  cursor: pointer;
+}
+.payment-method-tabs button.active {
+  color: #12100b;
+  border-color: rgba(244, 218, 132, 0.9);
+  background: linear-gradient(135deg, #f4da84, #b9933d);
+}
+.payment-qr-single {
+  display: grid;
+  place-items: center;
+  gap: 12px;
+  min-height: 360px;
+  padding: 18px;
+  border: 1px solid rgba(212, 175, 55, 0.2);
+  background: rgba(255, 255, 255, 0.035);
+}
+.payment-qr-single.wechat { box-shadow: inset 0 0 0 1px rgba(7, 193, 96, 0.16); }
+.payment-qr-single.alipay { box-shadow: inset 0 0 0 1px rgba(22, 119, 255, 0.16); }
+.payment-qr-single span {
+  color: var(--gold);
+  font-family: var(--font-display);
+  font-size: clamp(1.2rem, 2vw, 1.8rem);
+  font-weight: 900;
+}
+.payment-qr-single img {
+  width: min(280px, 88vw);
+  max-height: 360px;
+  object-fit: contain;
+  background: #fff;
+  padding: 10px;
+  border: 1px solid rgba(244, 218, 132, 0.28);
+}
+.payment-qr-single p,
+.payment-qr-single em,
+.payment-qr-single small {
+  max-width: 420px;
+  color: var(--faint);
+  line-height: 1.7;
+  text-align: center;
+}

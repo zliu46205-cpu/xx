@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_XUANXUE_API_BASE || "";
+﻿const API_BASE = import.meta.env.VITE_XUANXUE_API_BASE || "";
 
 async function request(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -10,7 +10,7 @@ async function request(path, options = {}) {
   });
   const payload = await response.json();
   if (!response.ok || payload.ok === false) {
-    const error = new Error(payload.message || "鐠囬攱鐪版径杈Е");
+    const error = new Error(payload.message || "閻犲洭鏀遍惇鐗堝緞鏉堫偉袝");
     error.payload = payload;
     throw error;
   }
@@ -66,7 +66,7 @@ export async function getReportDetail(reportId, session) {
   return request(`/api/reports/${encodeURIComponent(reportId)}`, { headers: authHeaders(session) });
 }
 
-export async function createOrder(planId, session, provider = "manual") {
+export async function createOrder(planId, session, provider = "wechat") {
   return request("/api/orders", {
     method: "POST",
     headers: authHeaders(session),
