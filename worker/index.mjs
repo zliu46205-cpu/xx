@@ -152,7 +152,14 @@ async function generateAiReport(baseReport, values, method, env) {
       style: values.style,
       reportTier: values.reportTier,
     },
-    baseReport,
+    baseReportDigest: {
+      title: baseReport.title,
+      method: baseReport.method,
+      topic: baseReport.topic,
+      oracle: baseReport.oracle,
+      basis: baseReport.basis,
+      terms: baseReport.termGlossary,
+    },
   };
 
   let lastError;
@@ -167,7 +174,7 @@ async function generateAiReport(baseReport, values, method, env) {
         model,
         messages: [
           { role: "system", content: AI_REPORT_INSTRUCTIONS },
-          { role: "user", content: `请基于以下输入生成${tier.name}。档位要求：${tier.guidance}。术数专项要求：${input.methodGuide}。问题场景：${input.questionScene}。请明显区分本方法和其他方法，避免套话。只返回 JSON，不要 Markdown。\n${JSON.stringify(input)}` },
+          { role: "user", content: `请基于以下输入生成${tier.name}。档位要求：${tier.guidance}。术数专项要求：${input.methodGuide}。问题场景：${input.questionScene}。请明显区分本方法和其他方法，避免套话。只返回 JSON，不要 Markdown。不要照抄 baseReportDigest 的原文；必须根据用户原问、method.id 和 questionScene 重写 summary、situation、tendency、inference、suggestions。\n${JSON.stringify(input)}` },
         ],
         temperature: attempt === 0 ? 0.75 : 0.35,
         response_format: { type: "json_object" },
